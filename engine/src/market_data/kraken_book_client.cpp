@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 #include <stdexcept>
 
 #include <boost/asio/ip/tcp.hpp>
@@ -11,6 +12,7 @@
 #include <openssl/ssl.h>
 
 #include "engine/book/checksum.hpp"
+#include "engine/market_data/sync_timeout_guard.hpp"
 
 namespace {
 
@@ -20,11 +22,17 @@ constexpr const char* kTarget = "/v2";
 
 constexpr std::chrono::milliseconds kInitialBackoff{500};
 constexpr std::chrono::milliseconds kMaxBackoff{32000};
+constexpr std::chrono::seconds kConnectTimeout{10};
+
+// threshold to publish book snapshot
+constexpr uint64_t kSnapshotDeltaThreshold = 500;
+constexpr std::chrono::seconds kSnapshotInterval{5};
 
 }
 
-KrakenBookClient::KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta)
-    : symbol_(std::move(symbol)), book_(book), onDelta_(std::move(onDelta)) {}
+KrakenBookClient::KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
+                                    BookSnapshotCallback onSnapshot)
+    : symbol_(std::move(symbol)), book_(book), onDelta_(std::move(onDelta)), onSnapshot_(std::move(onSnapshot)) {}
 
 void KrakenBookClient::connect() {
     namespace ssl = asio::ssl;
@@ -39,6 +47,8 @@ void KrakenBookClient::connect() {
         ws_.emplace(ioContext_, sslContext_);
     }
 
+
+    SyncTimeoutGuard timeoutGuard(beast::get_lowest_layer(*ws_), kConnectTimeout);
 
     // establish tcp connection
     beast::get_lowest_layer(*ws_).connect(results);
@@ -82,6 +92,7 @@ void KrakenBookClient::applyMessage(const BookMessage& message) {
     for (const auto& level : message.bids) {
         book_.bids.applyDelta(level.price, level.quantity);
         ++book_.lastSeq;
+        ++deltasSinceSnapshot_;
         if (onDelta_) {
             onDelta_(BookSide::Bid, level.price, level.quantity, book_.lastSeq);
         }
@@ -90,6 +101,7 @@ void KrakenBookClient::applyMessage(const BookMessage& message) {
     for (const auto& level : message.asks) {
         book_.asks.applyDelta(level.price, level.quantity);
         ++book_.lastSeq;
+        ++deltasSinceSnapshot_;
         if (onDelta_) {
             onDelta_(BookSide::Ask, level.price, level.quantity, book_.lastSeq);
         }
@@ -100,6 +112,30 @@ void KrakenBookClient::applyMessage(const BookMessage& message) {
 
     if (computed != message.checksum) {
         resubscribeAndRebuild();
+        return;
+    }
+
+    if (message.type == BookMessageType::Snapshot) {
+        publishSnapshot();
+    } else {
+        maybePublishSnapshot();
+    }
+}
+
+void KrakenBookClient::publishSnapshot() {
+    if (onSnapshot_) {
+        constexpr size_t kAll = std::numeric_limits<size_t>::max();
+        onSnapshot_(book_.bids.depth(kAll), book_.asks.depth(kAll), book_.lastSeq);
+    }
+    deltasSinceSnapshot_ = 0;
+    lastSnapshotTime_ = std::chrono::steady_clock::now();
+}
+
+void KrakenBookClient::maybePublishSnapshot() {
+    bool dueByCount = deltasSinceSnapshot_ >= kSnapshotDeltaThreshold;
+    bool dueByTime = (std::chrono::steady_clock::now() - lastSnapshotTime_) >= kSnapshotInterval;
+    if (dueByCount || dueByTime) {
+        publishSnapshot();
     }
 }
 

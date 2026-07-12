@@ -1,10 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 
 #include <boost/asio/io_context.hpp>
@@ -15,6 +17,7 @@
 #include <boost/beast/websocket/ssl.hpp>
 
 #include "engine/book/order_book.hpp"
+#include "engine/book/price_level.hpp"
 #include "engine/market_data/kraken_parser.hpp"
 
 namespace asio = boost::asio;
@@ -27,7 +30,11 @@ public:
 
     using BookDeltaCallback = std::function<void(BookSide side, Price price, Quantity quantity, uint64_t seq)>;
 
-    KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta);
+    using BookSnapshotCallback =
+        std::function<void(std::span<const PriceLevel> bids, std::span<const PriceLevel> asks, uint64_t seq)>;
+
+    KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
+                      BookSnapshotCallback onSnapshot);
 
     // not copyable or movable
     KrakenBookClient(const KrakenBookClient&) = delete;
@@ -43,9 +50,15 @@ private:
     void handleMessage(std::string_view raw);
     void applyMessage(const BookMessage& message);
 
+    void publishSnapshot();
+    void maybePublishSnapshot();
+
     std::string symbol_;
     OrderBook& book_;
     BookDeltaCallback onDelta_;
+    BookSnapshotCallback onSnapshot_;
+    uint64_t deltasSinceSnapshot_ = 0;
+    std::chrono::steady_clock::time_point lastSnapshotTime_ = std::chrono::steady_clock::now();
 
     asio::io_context ioContext_;
     asio::ssl::context sslContext_{asio::ssl::context::tlsv13_client};
