@@ -5,26 +5,17 @@
 #include <string>
 #include <string_view>
 
-constexpr int64_t PRICE_SCALE = 1e10;    // 1e10 -- 10 decimal places
+constexpr int64_t PRICE_SCALE = 1e10; // 10 decimal places
 constexpr int PRICE_SCALE_DIGITS = 10;
 
-constexpr int64_t QUANTITY_SCALE = 1e10;  // 1e10 -- 10 decimal places
+constexpr int64_t QUANTITY_SCALE = 1e10; // 10 decimal places
 constexpr int QUANTITY_SCALE_DIGITS = 10;
 
-// Returns true if a symbol's declared decimal precision (Kraken's
-// pair_decimals / lot_decimals) fits within the scale above. Called by
-// symbol_registry.hpp at subscribe time; on false, the subscription
-// must be rejected outright -- never silently truncated.
 inline bool priceScaleSupports(int pairDecimals) { return pairDecimals <= PRICE_SCALE_DIGITS; }
 inline bool quantityScaleSupports(int lotDecimals) { return lotDecimals <= QUANTITY_SCALE_DIGITS; }
 
 namespace price_detail {
 
-// Converts a decimal digit string ("61234.50", "-0.001") directly to
-// scaled-integer ticks -- digit by digit, no intermediate double. Throws
-// if the string has more fractional digits than `scaleDigits` supports
-// (fail loudly rather than silently drop precision) or contains a
-// non-digit character outside a single optional leading sign and one '.'.
 inline int64_t parseFixedPoint(std::string_view s, int64_t scale, int scaleDigits) {
     if (s.empty()) throw std::invalid_argument("parseFixedPoint: empty string");
 
@@ -62,9 +53,6 @@ inline int64_t parseFixedPoint(std::string_view s, int64_t scale, int scaleDigit
     return negative ? -ticks : ticks;
 }
 
-// Converts scaled-integer ticks back to an exact decimal digit string.
-// Used for Kraken checksum formatting (6.1) and display/debug output --
-// never for anything that feeds back into a calculation.
 inline std::string formatFixedPoint(int64_t ticks, int64_t scale, int scaleDigits) {
     bool negative = ticks < 0;
     uint64_t absTicks = negative ? static_cast<uint64_t>(-ticks) : static_cast<uint64_t>(ticks);
@@ -79,7 +67,7 @@ inline std::string formatFixedPoint(int64_t ticks, int64_t scale, int scaleDigit
     return (negative ? "-" : "") + std::to_string(intPart) + "." + fracStr;
 }
 
-} // namespace price_detail
+}
 
 struct Price {
     int64_t ticks = 0;
@@ -106,10 +94,6 @@ struct Quantity {
         return price_detail::formatFixedPoint(ticks, QUANTITY_SCALE, QUANTITY_SCALE_DIGITS);
     }
 
-    // Only the arithmetic the matching engine actually needs right now
-    // (decrementing remainingSize/queueAheadSize on a partial fill,
-    // §5.2) -- add more only once a concrete caller needs it, not
-    // speculatively.
     Quantity& operator-=(const Quantity& other) {
         ticks -= other.ticks;
         return *this;
