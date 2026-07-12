@@ -7,6 +7,7 @@
     "boost-interprocess",
     "openssl",
     "simdjson",
+    "zlib",
     "protobuf",
     "grpc",
     "catch2"

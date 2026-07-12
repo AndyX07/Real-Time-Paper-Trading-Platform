@@ -7,6 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(simdjson CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
@@ -36,6 +37,7 @@ add_library(engine_lib STATIC
     src/book/order_book.cpp
     src/book/checksum.cpp
     src/matching/matching_engine.cpp
+    src/market_data/kraken_asset_pairs.cpp
     src/market_data/kraken_book_client.cpp
     src/market_data/kraken_parser.cpp
     src/ipc/shared_memory_manager.cpp
@@ -55,6 +57,7 @@ target_link_libraries(engine_lib PUBLIC
     Boost::boost
     OpenSSL::SSL
     OpenSSL::Crypto
+    ZLIB::ZLIB
     simdjson::simdjson
     gRPC::grpc++
     protobuf::libprotobuf
