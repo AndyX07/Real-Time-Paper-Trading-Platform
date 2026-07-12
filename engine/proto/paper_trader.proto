@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package paper_trader;
+
+service EngineControl {
+  rpc SubscribeBook(SubscribeRequest) returns (SubscribeReply);
+  rpc UnsubscribeBook(SubscribeRequest) returns (SubscribeReply);
+  rpc PlaceOrder(PlaceOrderRequest) returns (OrderReply);
+  rpc CancelOrder(CancelOrderRequest) returns (OrderReply);
+
+  rpc WatchFills(WatchFillsRequest) returns (stream FillEvent);
+}
+
+enum Side { BID = 0; ASK = 1; }
+enum OrderType { MARKET = 0; LIMIT = 1; }
+
+message SubscribeRequest { string symbol = 1; }
+message SubscribeReply { bool ok = 1; string reason = 2; }
+
+message PlaceOrderRequest {
+  string symbol = 1;
+  Side side = 2;
+  OrderType type = 3;
+  int64 price_ticks = 4;
+  int64 size_ticks = 5;
+  string client_request_id = 6;
+}
+
+message CancelOrderRequest { uint64 engine_order_id = 1; }
+
+message OrderReply {
+  bool accepted = 1;
+  uint64 engine_order_id = 2;
+  string reject_reason = 3;
+}
+
+message WatchFillsRequest {}
+message FillEvent {
+  uint64 engine_order_id = 1;
+  int64 price_ticks = 2;
+  int64 size_ticks = 3;
+  uint64 ts = 4;
+}
