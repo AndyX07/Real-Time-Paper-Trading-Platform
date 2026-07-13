@@ -1,6 +1,7 @@
 #include "engine/ipc/shared_memory_manager.hpp"
 
 #include <cstring>
+#include <filesystem>
 #include <new>
 #include <stdexcept>
 
@@ -29,6 +30,10 @@ bool hasValidHeader(const SharedMemorySegment* layout, size_t mappedBytes) {
 }
 
 SharedMemoryManager::SharedMemoryManager() {
+    // BOOST_INTERPROCESS_SHARED_DIR_PATH skips Boost's own directory-creation
+    // step (it only runs that for its default, boot-timestamped location).
+    std::filesystem::create_directories(BOOST_INTERPROCESS_SHARED_DIR_PATH);
+
     bool reuseExisting = false;
 
     try {
