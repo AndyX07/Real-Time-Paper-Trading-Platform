@@ -47,6 +47,7 @@ public:
     void reset() {
         writeIndex_.store(0, std::memory_order_relaxed);
         readIndex_.store(0, std::memory_order_relaxed);
+        droppedCount_.store(0, std::memory_order_relaxed);
     }
 
     // returns false and drops item if queue is full
@@ -54,11 +55,16 @@ public:
         uint64_t w = writeIndex_.load(std::memory_order_relaxed);
         uint64_t r = readIndex_.load(std::memory_order_acquire);
         if (w - r >= RING_BUFFER_CAPACITY) {
+            droppedCount_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
         slots_[w % RING_BUFFER_CAPACITY] = item;
         writeIndex_.store(w + 1, std::memory_order_release);
         return true;
+    }
+
+    uint64_t droppedCount() const {
+        return droppedCount_.load(std::memory_order_relaxed);
     }
 
     // returns false if queue is empty
@@ -76,6 +82,7 @@ public:
 private:
     std::atomic<uint64_t> writeIndex_{0};
     std::atomic<uint64_t> readIndex_{0};
+    std::atomic<uint64_t> droppedCount_{0};
     BookDelta slots_[RING_BUFFER_CAPACITY];
 };
 
