@@ -1,20 +1,17 @@
 #include "engine/ipc/shared_memory_manager.hpp"
 
 #include <cstring>
+#include <new>
 #include <stdexcept>
 
 #include <boost/interprocess/exceptions.hpp>
-#include <boost/interprocess/shared_memory_object.hpp>
 
 namespace bip = boost::interprocess;
 
 namespace {
 
 constexpr const char* SEGMENT_NAME = "paper_trader_book_v1";
-constexpr const char* LAYOUT_OBJECT_NAME = "layout";
-
-// Payload is ~7MB for 32 symbol slots the rest is slack for boost::interprocess's own allocator bookkeeping.
-constexpr size_t SEGMENT_BYTES = 10ull * 1024 * 1024;
+constexpr size_t SEGMENT_BYTES = sizeof(SharedMemorySegment);
 
 void setSlotSymbol(SymbolSlot& slot, std::string_view symbol) {
     if (symbol.size() >= sizeof(slot.symbol)) {
@@ -24,8 +21,9 @@ void setSlotSymbol(SymbolSlot& slot, std::string_view symbol) {
     std::memcpy(slot.symbol, symbol.data(), symbol.size());
 }
 
-bool hasValidHeader(SharedMemorySegment* layout) {
-    return layout != nullptr && layout->header.magic == SHARED_MEMORY_MAGIC && layout->header.version == SHARED_MEMORY_SEGMENT_VERSION;
+bool hasValidHeader(const SharedMemorySegment* layout, size_t mappedBytes) {
+    return layout != nullptr && mappedBytes >= sizeof(SharedMemorySegment) &&
+           layout->header.magic == SHARED_MEMORY_MAGIC && layout->header.version == SHARED_MEMORY_SEGMENT_VERSION;
 }
 
 }
@@ -34,15 +32,17 @@ SharedMemoryManager::SharedMemoryManager() {
     bool reuseExisting = false;
 
     try {
-        bip::managed_shared_memory existing(bip::open_only, SEGMENT_NAME);
-        reuseExisting = hasValidHeader(existing.find<SharedMemorySegment>(LAYOUT_OBJECT_NAME).first);
+        bip::shared_memory_object existing(bip::open_only, SEGMENT_NAME, bip::read_write);
+        bip::mapped_region existingRegion(existing, bip::read_write);
+        reuseExisting = hasValidHeader(static_cast<const SharedMemorySegment*>(existingRegion.get_address()),
+                                        existingRegion.get_size());
     } catch (const bip::interprocess_exception&) {
-
     }
 
     if (reuseExisting) {
-        segment_ = bip::managed_shared_memory(bip::open_only, SEGMENT_NAME);
-        layout_ = segment_.find<SharedMemorySegment>(LAYOUT_OBJECT_NAME).first;
+        segmentObject_ = bip::shared_memory_object(bip::open_only, SEGMENT_NAME, bip::read_write);
+        region_ = bip::mapped_region(segmentObject_, bip::read_write);
+        layout_ = static_cast<SharedMemorySegment*>(region_.get_address());
 
         for (auto& slot : layout_->slots) {
             releaseSlot(&slot);
@@ -51,8 +51,10 @@ SharedMemoryManager::SharedMemoryManager() {
     }
 
     bip::shared_memory_object::remove(SEGMENT_NAME);
-    segment_ = bip::managed_shared_memory(bip::create_only, SEGMENT_NAME, SEGMENT_BYTES);
-    layout_ = segment_.construct<SharedMemorySegment>(LAYOUT_OBJECT_NAME)();
+    segmentObject_ = bip::shared_memory_object(bip::create_only, SEGMENT_NAME, bip::read_write);
+    segmentObject_.truncate(static_cast<bip::offset_t>(SEGMENT_BYTES));
+    region_ = bip::mapped_region(segmentObject_, bip::read_write);
+    layout_ = new (region_.get_address()) SharedMemorySegment();
     layout_->header.magic = SHARED_MEMORY_MAGIC;
     layout_->header.version = SHARED_MEMORY_SEGMENT_VERSION;
 }

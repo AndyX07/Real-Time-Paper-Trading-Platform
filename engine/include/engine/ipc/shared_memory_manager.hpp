@@ -5,7 +5,8 @@
 #include <string_view>
 #include <type_traits>
 
-#include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/interprocess/mapped_region.hpp>
+#include <boost/interprocess/shared_memory_object.hpp>
 
 #include "engine/ipc/ring_buffer.hpp"
 #include "engine/ipc/snapshot_slot.hpp"
@@ -48,6 +49,7 @@ public:
     void releaseSlot(SymbolSlot* slot);
 
 private:
-    boost::interprocess::managed_shared_memory segment_;
+    boost::interprocess::shared_memory_object segmentObject_;
+    boost::interprocess::mapped_region region_;
     SharedMemorySegment* layout_ = nullptr;
 };
