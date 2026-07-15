@@ -108,8 +108,8 @@ SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
                 std::chrono::duration_cast<std::chrono::nanoseconds>(
                     std::chrono::system_clock::now().time_since_epoch())
                     .count());
-            snapshot.numBidLevels = static_cast<uint16_t>(std::min(bids.size(), SNAPSHOT_DEPTH));
-            snapshot.numAskLevels = static_cast<uint16_t>(std::min(asks.size(), SNAPSHOT_DEPTH));
+            snapshot.numBidLevels = static_cast<uint16_t>(std::min(bids.size(), BOOK_DEPTH));
+            snapshot.numAskLevels = static_cast<uint16_t>(std::min(asks.size(), BOOK_DEPTH));
             for (size_t i = 0; i < snapshot.numBidLevels; ++i) {
                 snapshot.bids[i] = bids[i];
             }
@@ -119,8 +119,8 @@ SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
             slot->snapshotSlot.write(snapshot);
         };
 
-    entry.client =
-        std::make_unique<KrakenBookClient>(key, *entry.book, std::move(onDelta), std::move(onSnapshot));
+    entry.client = std::make_unique<KrakenBookClient>(key, *entry.book, std::move(onDelta), std::move(onSnapshot),
+                                                       precision->pairDecimals, precision->lotDecimals);
     KrakenBookClient* clientPtr = entry.client.get();
     entry.thread = std::thread([clientPtr] { clientPtr->run(); });
 

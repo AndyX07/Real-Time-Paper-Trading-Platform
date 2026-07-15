@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include <span>
 #include <string>
@@ -7,10 +8,14 @@
 
 enum class BookSide : uint8_t { Bid, Ask };
 
+// levels per side
+constexpr size_t BOOK_DEPTH = 100;
+
 class OrderBookSide {
 public:
     explicit OrderBookSide(BookSide side) : side_(side) {}
-    void applyDelta(Price price, Quantity newQuantity);
+    // Returns the price of a level evicted to enforce BOOK_DEPTH
+    std::optional<Price> applyDelta(Price price, Quantity newQuantity);
     void clear();
     const PriceLevel& top() const;
     std::span<const PriceLevel> depth(size_t n) const;

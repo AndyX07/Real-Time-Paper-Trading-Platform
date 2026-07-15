@@ -17,4 +17,5 @@ std::string stripForChecksum(const std::string& decimalDigits);
 
 }
 
-uint32_t computeBookChecksum(std::span<const PriceLevel> askLevels, std::span<const PriceLevel> bidLevels);
+uint32_t computeBookChecksum(std::span<const PriceLevel> askLevels, std::span<const PriceLevel> bidLevels,
+                              int priceDecimals, int quantityDecimals);

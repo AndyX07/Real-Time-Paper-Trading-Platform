@@ -5,9 +5,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "engine/book/order_book.hpp"
 #include "engine/book/price_level.hpp"
-
-constexpr size_t SNAPSHOT_DEPTH = 100;
 
 struct BookSnapshot {
     char symbol[16];
@@ -15,8 +14,8 @@ struct BookSnapshot {
     uint64_t engineTsNanos;
     uint16_t numBidLevels;
     uint16_t numAskLevels;
-    PriceLevel bids[SNAPSHOT_DEPTH];
-    PriceLevel asks[SNAPSHOT_DEPTH];
+    PriceLevel bids[BOOK_DEPTH];
+    PriceLevel asks[BOOK_DEPTH];
 };
 
 static_assert(std::is_trivially_copyable_v<BookSnapshot>);

@@ -25,7 +25,12 @@ std::optional<BookMessage> parseBookMessage(simdjson::ondemand::parser& parser, 
     simdjson::padded_string json(raw);
     simdjson::ondemand::document doc = parser.iterate(json);
 
-    std::string_view channel = doc["channel"].get_string();
+    std::string_view channel;
+    try {
+        channel = doc["channel"].get_string().value();
+    } catch (const simdjson::simdjson_error&) {
+        return std::nullopt; // no "channel" field -- e.g. a subscribe ack, not a book message
+    }
     if (channel != "book") {
         return std::nullopt;
     }

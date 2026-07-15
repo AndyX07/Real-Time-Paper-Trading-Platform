@@ -34,7 +34,7 @@ public:
         std::function<void(std::span<const PriceLevel> bids, std::span<const PriceLevel> asks, uint64_t seq)>;
 
     KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
-                      BookSnapshotCallback onSnapshot);
+                      BookSnapshotCallback onSnapshot, int priceDecimals, int quantityDecimals);
 
     // not copyable or movable
     KrakenBookClient(const KrakenBookClient&) = delete;
@@ -57,6 +57,8 @@ private:
     OrderBook& book_;
     BookDeltaCallback onDelta_;
     BookSnapshotCallback onSnapshot_;
+    int priceDecimals_;
+    int quantityDecimals_;
     uint64_t deltasSinceSnapshot_ = 0;
     std::chrono::steady_clock::time_point lastSnapshotTime_ = std::chrono::steady_clock::now();
 

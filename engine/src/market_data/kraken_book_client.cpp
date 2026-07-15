@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 
@@ -12,6 +13,7 @@
 #include <openssl/ssl.h>
 
 #include "engine/book/checksum.hpp"
+#include "engine/market_data/idle_timeout_watchdog.hpp"
 #include "engine/market_data/sync_timeout_guard.hpp"
 
 namespace {
@@ -23,6 +25,7 @@ constexpr const char* kTarget = "/v2";
 constexpr std::chrono::milliseconds kInitialBackoff{500};
 constexpr std::chrono::milliseconds kMaxBackoff{32000};
 constexpr std::chrono::seconds kConnectTimeout{10};
+constexpr std::chrono::seconds kReadIdleTimeout{60};
 
 // threshold to publish book snapshot
 constexpr uint64_t kSnapshotDeltaThreshold = 500;
@@ -31,8 +34,9 @@ constexpr std::chrono::seconds kSnapshotInterval{5};
 }
 
 KrakenBookClient::KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
-                                    BookSnapshotCallback onSnapshot)
-    : symbol_(std::move(symbol)), book_(book), onDelta_(std::move(onDelta)), onSnapshot_(std::move(onSnapshot)) {}
+                                    BookSnapshotCallback onSnapshot, int priceDecimals, int quantityDecimals)
+    : symbol_(std::move(symbol)), book_(book), onDelta_(std::move(onDelta)), onSnapshot_(std::move(onSnapshot)),
+      priceDecimals_(priceDecimals), quantityDecimals_(quantityDecimals) {}
 
 void KrakenBookClient::connect() {
     namespace ssl = asio::ssl;
@@ -64,7 +68,7 @@ void KrakenBookClient::connect() {
 
 void KrakenBookClient::subscribe() {
     std::string message = R"({"method":"subscribe","params":{"channel":"book","symbol":[")" +
-                           symbol_ + R"("],"depth":)" + std::to_string(CHECKSUM_DEPTH) + "}}";
+                           symbol_ + R"("],"depth":)" + std::to_string(BOOK_DEPTH) + "}}";
     ws_->write(asio::buffer(message));
 }
 
@@ -90,27 +94,48 @@ void KrakenBookClient::applyMessage(const BookMessage& message) {
     }
 
     for (const auto& level : message.bids) {
-        book_.bids.applyDelta(level.price, level.quantity);
+        auto evicted = book_.bids.applyDelta(level.price, level.quantity);
         ++book_.lastSeq;
         ++deltasSinceSnapshot_;
         if (onDelta_) {
             onDelta_(BookSide::Bid, level.price, level.quantity, book_.lastSeq);
         }
+        if (evicted) {
+            ++book_.lastSeq;
+            ++deltasSinceSnapshot_;
+            if (onDelta_) {
+                onDelta_(BookSide::Bid, *evicted, Quantity{0}, book_.lastSeq);
+            }
+        }
     }
 
     for (const auto& level : message.asks) {
-        book_.asks.applyDelta(level.price, level.quantity);
+        auto evicted = book_.asks.applyDelta(level.price, level.quantity);
         ++book_.lastSeq;
         ++deltasSinceSnapshot_;
         if (onDelta_) {
             onDelta_(BookSide::Ask, level.price, level.quantity, book_.lastSeq);
         }
+        if (evicted) {
+            ++book_.lastSeq;
+            ++deltasSinceSnapshot_;
+            if (onDelta_) {
+                onDelta_(BookSide::Ask, *evicted, Quantity{0}, book_.lastSeq);
+            }
+        }
     }
 
-    uint32_t computed = computeBookChecksum(book_.asks.depth(CHECKSUM_DEPTH), book_.bids.depth(CHECKSUM_DEPTH));
+    uint32_t computed = computeBookChecksum(book_.asks.depth(CHECKSUM_DEPTH), book_.bids.depth(CHECKSUM_DEPTH),
+                                             priceDecimals_, quantityDecimals_);
     book_.lastCheckSum = computed;
 
     if (computed != message.checksum) {
+        std::cerr << "engine: kraken_book_client[" << symbol_ << "] checksum mismatch on "
+                  << (message.type == BookMessageType::Snapshot ? "snapshot" : "update")
+                  << " computed=" << computed << " expected=" << message.checksum
+                  << " bids=" << book_.bids.depth(CHECKSUM_DEPTH).size()
+                  << " asks=" << book_.asks.depth(CHECKSUM_DEPTH).size()
+                  << " msgBids=" << message.bids.size() << " msgAsks=" << message.asks.size() << "\n";
         resubscribeAndRebuild();
         return;
     }
@@ -157,17 +182,21 @@ void KrakenBookClient::run() {
             backoff = kInitialBackoff;
 
             beast::flat_buffer buffer;
+            // kraken ws sends a heartbeat every second so if no response for 60 seconds, then dead connection
+            IdleTimeoutWatchdog readWatchdog(beast::get_lowest_layer(*ws_), kReadIdleTimeout);
             while (!stopRequested_.load(std::memory_order_relaxed)) {
                 buffer.clear();
                 ws_->read(buffer);
+                readWatchdog.kick();
                 handleMessage(beast::buffers_to_string(buffer.data()));
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& e) {
             // Disconnect, handshake failure, or a malformed message
             // (kraken_parser.hpp) -- all handled the same way: fall
             // through to the backoff below and reconnect from scratch.
             // subscribe() on the new connection naturally requests a
             // fresh snapshot, so there's nothing else to clean up here.
+            std::cerr << "engine: kraken_book_client[" << symbol_ << "] " << e.what() << "\n";
         }
 
         if (stopRequested_.load(std::memory_order_relaxed)) {
