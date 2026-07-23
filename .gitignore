@@ -9,3 +9,8 @@ out/
 .clangd
 .vb/
 .vscode/
+dist/
+*.tsbuildinfo
+backend/genproto/
+backend/.tools/
+backend/server.exe
