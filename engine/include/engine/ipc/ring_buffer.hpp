@@ -50,6 +50,11 @@ public:
         droppedCount_.store(0, std::memory_order_relaxed);
     }
 
+    // release stops compiler reordering here
+    // cross process visibility is x86-64 TSO store->store ordering guarantee
+    // there's no c++ acquire pairing the release because the reader is a separate Go process
+    // this would not be safe on ARM
+
     // returns false and drops item if queue is full
     bool tryPush(const BookDelta& item) {
         uint64_t w = writeIndex_.load(std::memory_order_relaxed);

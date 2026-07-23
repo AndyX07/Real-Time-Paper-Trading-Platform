@@ -35,6 +35,11 @@ public:
         value_ = T{};
     }
 
+    // release stops compiler reordering here
+    // cross process visibility is x86-64 TSO store->store ordering guarantee
+    // there's no c++ acquire pairing the release because the reader is a separate Go process
+    // this would not be safe on ARM
+
     // when version is odd, write is in progress
     // when version is even, write is finished
     void write(const T& value) {
