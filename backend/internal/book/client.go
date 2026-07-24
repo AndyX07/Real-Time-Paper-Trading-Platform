@@ -2,21 +2,24 @@ package book
 
 import (
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 )
 
 const outboxMaxSize = 500
-const maxConsecutiveOverflows = 5
+const maxOverflowsPerWindow = 5
+const overflowWindow = 10 * time.Second
 
 type ClientState struct {
 	Conn   *websocket.Conn
 	Outbox chan any
 
-	mu                   sync.Mutex
-	Symbols              map[string]struct{}
-	pending              map[string]struct{} // subscribed but no seed data
-	ConsecutiveOverflows int
+	mu            sync.Mutex
+	Symbols       map[string]struct{}
+	pending       map[string]struct{} // subscribed but no seed data
+	overflowCount int
+	windowStart   time.Time
 }
 
 func NewClientState(conn *websocket.Conn) *ClientState {
@@ -68,9 +71,6 @@ func (c *ClientState) SymbolSnapshot() []string {
 func (c *ClientState) Enqueue(poller *BookPoller, message any) {
 	select {
 	case c.Outbox <- message:
-		c.mu.Lock()
-		c.ConsecutiveOverflows = 0
-		c.mu.Unlock()
 	default:
 		c.collapseAndResync(poller)
 	}
@@ -78,8 +78,13 @@ func (c *ClientState) Enqueue(poller *BookPoller, message any) {
 
 func (c *ClientState) collapseAndResync(poller *BookPoller) {
 	c.mu.Lock()
-	c.ConsecutiveOverflows++
-	overflows := c.ConsecutiveOverflows
+	now := time.Now()
+	if now.Sub(c.windowStart) > overflowWindow {
+		c.windowStart = now
+		c.overflowCount = 0
+	}
+	c.overflowCount++
+	overflows := c.overflowCount
 	c.mu.Unlock()
 
 drain:
@@ -103,7 +108,7 @@ drain:
 		}
 	}
 
-	if overflows >= maxConsecutiveOverflows {
+	if overflows >= maxOverflowsPerWindow {
 		c.Conn.Close(websocket.StatusPolicyViolation, "stuck past overflow limit")
 	}
 }
