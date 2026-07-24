@@ -22,7 +22,7 @@ std::vector<BookLevelUpdate> parseLevels(simdjson::ondemand::array levels) {
 }
 
 std::optional<BookMessage> parseBookMessage(simdjson::ondemand::parser& parser, std::string_view raw) {
-    simdjson::padded_string json(raw);
+    simdjson::padded_string json{raw};
     simdjson::ondemand::document doc = parser.iterate(json);
 
     std::string_view channel;

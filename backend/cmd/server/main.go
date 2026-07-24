@@ -13,6 +13,7 @@ import (
 	"papertrader/backend/internal/candle"
 	"papertrader/backend/internal/config"
 	"papertrader/backend/internal/control"
+	"papertrader/backend/internal/symbols"
 )
 
 func withCORS(next http.Handler) http.Handler {
@@ -52,6 +53,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
+	mux.HandleFunc("/api/symbols", symbols.Handler)
 	mux.HandleFunc("/api/candles/history", candleRouter.HandleHistory)
 	mux.HandleFunc("/ws/candles", candleRouter.HandleWS)
 	mux.HandleFunc("/ws/book", bookRouter.HandleWS)

@@ -3,10 +3,11 @@ package config
 import "os"
 
 const (
-	KrakenOhlcWSURL    = "wss://ws.kraken.com/v2"
-	KrakenRestOhlcURL  = "https://api.kraken.com/0/public/OHLC"
-	DefaultOhlcMinutes = 1
-	DevOrigin          = "localhost:5173"
+	KrakenOhlcWSURL         = "wss://ws.kraken.com/v2"
+	KrakenRestOhlcURL       = "https://api.kraken.com/0/public/OHLC"
+	KrakenRestAssetPairsURL = "https://api.kraken.com/0/public/AssetPairs"
+	DefaultOhlcMinutes      = 1
+	DevOrigin               = "localhost:5173"
 )
 
 func getenv(key, fallback string) string {

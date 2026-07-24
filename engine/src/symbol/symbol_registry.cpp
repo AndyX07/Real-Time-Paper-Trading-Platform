@@ -23,10 +23,10 @@ void setSnapshotSymbol(BookSnapshot& snapshot, std::string_view symbol) {
 }
 
 SymbolRegistry::SymbolRegistry(SharedMemoryManager& sharedMemory, PrecisionLookup precisionLookup)
-    : sharedMemory_(sharedMemory), precisionLookup_(std::move(precisionLookup)) {}
+    : sharedMemory_{sharedMemory}, precisionLookup_{std::move(precisionLookup)} {}
 
 SymbolRegistry::~SymbolRegistry() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock{mutex_};
 
     for (auto& [symbol, entry] : entries_) {
         entry.client->stop();
@@ -38,10 +38,10 @@ SymbolRegistry::~SymbolRegistry() {
 }
 
 SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
-    std::string key(symbol);
+    std::string key{symbol};
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock{mutex_};
         auto it = entries_.find(key);
         if (it != entries_.end()) {
             ++it->second.refcount;
@@ -57,7 +57,7 @@ SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
         return {false, "symbol requires more precision than PRICE_SCALE/QUANTITY_SCALE supports"};
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock{mutex_};
 
     // Re-check: another thread may have completed a 0->1 subscribe for
     // this exact symbol while the lookup above ran without the lock
@@ -133,8 +133,8 @@ SubscribeResult SymbolRegistry::unsubscribe(std::string_view symbol) {
     bool shouldTeardown = false;
 
     {
-        std::lock_guard<std::mutex> lock(mutex_);
-        std::string key(symbol);
+        std::lock_guard<std::mutex> lock{mutex_};
+        std::string key{symbol};
         auto it = entries_.find(key);
         if (it == entries_.end()) {
             return {false, "symbol not subscribed"};

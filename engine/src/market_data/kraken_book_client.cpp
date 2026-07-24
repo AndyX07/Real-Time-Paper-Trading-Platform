@@ -35,24 +35,24 @@ constexpr std::chrono::seconds kSnapshotInterval{5};
 
 KrakenBookClient::KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
                                     BookSnapshotCallback onSnapshot, int priceDecimals, int quantityDecimals)
-    : symbol_(std::move(symbol)), book_(book), onDelta_(std::move(onDelta)), onSnapshot_(std::move(onSnapshot)),
-      priceDecimals_(priceDecimals), quantityDecimals_(quantityDecimals) {}
+    : symbol_{std::move(symbol)}, book_{book}, onDelta_{std::move(onDelta)}, onSnapshot_{std::move(onSnapshot)},
+      priceDecimals_{priceDecimals}, quantityDecimals_{quantityDecimals} {}
 
 void KrakenBookClient::connect() {
     namespace ssl = asio::ssl;
 
     // resolves dns
-    tcp::resolver resolver(ioContext_);
+    tcp::resolver resolver{ioContext_};
     auto const results = resolver.resolve(kHost, kPort);
 
     {
         // guards against stop() accessing ws_
-        std::lock_guard<std::mutex> lock(wsMutex_);
+        std::lock_guard<std::mutex> lock{wsMutex_};
         ws_.emplace(ioContext_, sslContext_);
     }
 
 
-    SyncTimeoutGuard timeoutGuard(beast::get_lowest_layer(*ws_), kConnectTimeout);
+    SyncTimeoutGuard timeoutGuard{beast::get_lowest_layer(*ws_), kConnectTimeout};
 
     // establish tcp connection
     beast::get_lowest_layer(*ws_).connect(results);
@@ -183,7 +183,7 @@ void KrakenBookClient::run() {
 
             beast::flat_buffer buffer;
             // kraken ws sends a heartbeat every second so if no response for 60 seconds, then dead connection
-            IdleTimeoutWatchdog readWatchdog(beast::get_lowest_layer(*ws_), kReadIdleTimeout);
+            IdleTimeoutWatchdog readWatchdog{beast::get_lowest_layer(*ws_), kReadIdleTimeout};
             while (!stopRequested_.load(std::memory_order_relaxed)) {
                 buffer.clear();
                 ws_->read(buffer);
@@ -204,7 +204,7 @@ void KrakenBookClient::run() {
         }
 
         {
-            std::unique_lock<std::mutex> lock(backoffMutex_);
+            std::unique_lock<std::mutex> lock{backoffMutex_};
             backoffCv_.wait_for(lock, backoff,
                                  [this] { return stopRequested_.load(std::memory_order_relaxed); });
         }
@@ -216,7 +216,7 @@ void KrakenBookClient::stop() {
     stopRequested_.store(true, std::memory_order_relaxed);
     backoffCv_.notify_one();
 
-    std::lock_guard<std::mutex> lock(wsMutex_);
+    std::lock_guard<std::mutex> lock{wsMutex_};
     if (ws_) {
         auto& socket = beast::get_lowest_layer(*ws_).socket();
         boost::system::error_code ec;

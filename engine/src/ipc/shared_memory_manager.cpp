@@ -37,8 +37,8 @@ SharedMemoryManager::SharedMemoryManager() {
     bool reuseExisting = false;
 
     try {
-        bip::shared_memory_object existing(bip::open_only, SEGMENT_NAME, bip::read_write);
-        bip::mapped_region existingRegion(existing, bip::read_write);
+        bip::shared_memory_object existing{bip::open_only, SEGMENT_NAME, bip::read_write};
+        bip::mapped_region existingRegion{existing, bip::read_write};
         reuseExisting = hasValidHeader(static_cast<const SharedMemorySegment*>(existingRegion.get_address()),
                                         existingRegion.get_size());
     } catch (const bip::interprocess_exception&) {

@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app-bg: #070809;
+  --color-panel: #1e222d;
+  --color-panel-alt: #181b24;
+  --color-chart-bg: #131722;
+  --color-border: #2a2e39;
+  --color-text-primary: #d1d4dc;
+  --color-text-muted: #868993;
+  --color-buy: #26a69a;
+  --color-sell: #ef5350;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}

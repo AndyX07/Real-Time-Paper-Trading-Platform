@@ -16,9 +16,11 @@ interface OrderEntryProps {
 
 export function OrderEntry({ symbol, onOrderFilled }: OrderEntryProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
-  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [orderType, setOrderType] = useState<"market" | "limit">("limit");
   const [price, setPrice] = useState("");
   const [size, setSize] = useState("");
+
+  const total = orderType === "limit" && price && size ? Number(price) * Number(size) : null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,51 +41,95 @@ export function OrderEntry({ symbol, onOrderFilled }: OrderEntryProps) {
     setPrice("");
   }
 
-  return (
-    <form onSubmit={handleSubmit} style={{ background: "#1e222d", padding: 16, borderRadius: 6, minWidth: 240 }}>
-      <h3 style={{ marginTop: 0, fontSize: 14 }}>Order Entry ({symbol})</h3>
+  const [base, quote] = symbol.split("/");
 
-      <div style={{ marginBottom: 8 }}>
-        <button type="button" onClick={() => setSide("buy")} style={{ background: side === "buy" ? "#26a69a" : "#333", color: "#fff", border: "none", padding: "6px 12px", marginRight: 4 }}>
+  return (
+    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-panel text-text-primary">
+      <div className="grid grid-cols-2 gap-px bg-border">
+        <button
+          type="button"
+          onClick={() => setSide("buy")}
+          className={`py-2.5 text-sm font-semibold transition-colors ${
+            side === "buy" ? "bg-buy text-white" : "bg-panel-alt text-text-muted hover:text-text-primary"
+          }`}
+        >
           Buy
         </button>
-        <button type="button" onClick={() => setSide("sell")} style={{ background: side === "sell" ? "#ef5350" : "#333", color: "#fff", border: "none", padding: "6px 12px" }}>
+        <button
+          type="button"
+          onClick={() => setSide("sell")}
+          className={`py-2.5 text-sm font-semibold transition-colors ${
+            side === "sell" ? "bg-sell text-white" : "bg-panel-alt text-text-muted hover:text-text-primary"
+          }`}
+        >
           Sell
         </button>
       </div>
 
-      <div style={{ marginBottom: 8 }}>
-        <select value={orderType} onChange={(e) => setOrderType(e.target.value as "market" | "limit")}>
-          <option value="market">Market</option>
-          <option value="limit">Limit</option>
-        </select>
+      <div className="flex gap-4 border-b border-border px-3 pt-2.5 text-sm">
+        {(["limit", "market"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setOrderType(t)}
+            className={`-mb-px border-b-2 pb-2 capitalize transition-colors ${
+              orderType === t
+                ? "border-text-primary text-text-primary"
+                : "border-transparent text-text-muted hover:text-text-primary"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
-      {orderType === "limit" && (
-        <div style={{ marginBottom: 8 }}>
-          <input
-            type="text"
-            placeholder="Price"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            style={{ width: "100%", boxSizing: "border-box" }}
-          />
+      <div className="flex flex-col gap-3 p-3">
+        {orderType === "limit" && (
+          <label className="flex flex-col gap-1 text-xs text-text-muted">
+            Limit price USD
+            <input
+              type="text"
+              placeholder="0.00"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="rounded-lg bg-panel-alt px-3 py-2.5 text-base font-medium text-text-primary outline-none ring-1 ring-border focus:ring-text-muted"
+            />
+          </label>
+        )}
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex flex-col gap-1 text-xs text-text-muted">
+            Quantity {base}
+            <input
+              type="text"
+              placeholder="0.00"
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              className="rounded-lg bg-panel-alt px-3 py-2.5 text-base font-medium text-text-primary outline-none ring-1 ring-border focus:ring-text-muted"
+            />
+          </label>
+
+          <div className="flex flex-col gap-1 text-xs text-text-muted">
+            Total {quote}
+            <div className="flex h-[42px] items-center rounded-lg bg-panel-alt px-3 text-base font-medium text-text-primary ring-1 ring-border">
+              {total != null ? `≈ ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "--"}
+            </div>
+          </div>
         </div>
-      )}
 
-      <div style={{ marginBottom: 8 }}>
-        <input
-          type="text"
-          placeholder="Size"
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
-          style={{ width: "100%", boxSizing: "border-box" }}
-        />
+        <button
+          type="submit"
+          className={`mt-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors ${
+            side === "buy" ? "bg-buy hover:opacity-90" : "bg-sell hover:opacity-90"
+          }`}
+        >
+          {side === "buy" ? "Buy" : "Sell"} {base} (fake fill)
+        </button>
+
+        <p className="text-center text-[11px] text-text-muted">
+          Paper trading only -- fills are simulated, not routed to the engine yet.
+        </p>
       </div>
-
-      <button type="submit" style={{ width: "100%", padding: 8, background: "#26a69a", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}>
-        Place Order (fake fill)
-      </button>
     </form>
   );
 }

@@ -21,15 +21,15 @@ std::string controlPlaneAddress() {
 
 int main() {
     SharedMemoryManager sharedMemory;
-    SymbolRegistry symbolRegistry(sharedMemory, fetchKrakenAssetPairPrecision);
-    ControlServiceImpl service(symbolRegistry);
+    SymbolRegistry symbolRegistry{sharedMemory, fetchKrakenAssetPairPrecision};
+    ControlServiceImpl service{symbolRegistry};
 
     std::string address = controlPlaneAddress();
     grpc::ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
 
-    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    std::unique_ptr<grpc::Server> server{builder.BuildAndStart()};
     if (!server) {
         std::cerr << "engine: failed to start gRPC server on " << address << "\n";
         return 1;

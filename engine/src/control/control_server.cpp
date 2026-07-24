@@ -1,6 +1,6 @@
 #include "engine/control/control_server.hpp"
 
-ControlServiceImpl::ControlServiceImpl(SymbolRegistry& symbolRegistry) : symbolRegistry_(symbolRegistry) {}
+ControlServiceImpl::ControlServiceImpl(SymbolRegistry& symbolRegistry) : symbolRegistry_{symbolRegistry} {}
 
 grpc::Status ControlServiceImpl::SubscribeBook(grpc::ServerContext*, const paper_trader::SubscribeRequest* request,
                                                 paper_trader::SubscribeReply* response) {

@@ -13,7 +13,7 @@ constexpr size_t BOOK_DEPTH = 100;
 
 class OrderBookSide {
 public:
-    explicit OrderBookSide(BookSide side) : side_(side) {}
+    explicit OrderBookSide(BookSide side) : side_{side} {}
     // Returns the price of a level evicted to enforce BOOK_DEPTH
     std::optional<Price> applyDelta(Price price, Quantity newQuantity);
     void clear();

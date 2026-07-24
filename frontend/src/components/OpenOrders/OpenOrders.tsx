@@ -5,35 +5,32 @@ interface OpenOrdersProps {
 }
 
 export function OpenOrders({ orders }: OpenOrdersProps) {
+  if (orders.length === 0) {
+    return <div className="flex h-full items-center justify-center text-sm text-text-muted">No orders yet.</div>;
+  }
+
   return (
-    <div style={{ background: "#1e222d", padding: 16, borderRadius: 6, flex: 1 }}>
-      <h3 style={{ marginTop: 0, fontSize: 14 }}>Orders (fake fills)</h3>
-      {orders.length === 0 ? (
-        <p style={{ color: "#888", fontSize: 13 }}>No orders yet.</p>
-      ) : (
-        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", color: "#888" }}>
-              <th>Symbol</th>
-              <th>Side</th>
-              <th>Type</th>
-              <th>Price</th>
-              <th>Size</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((o) => (
-              <tr key={o.id}>
-                <td>{o.symbol}</td>
-                <td style={{ color: o.side === "buy" ? "#26a69a" : "#ef5350" }}>{o.side}</td>
-                <td>{o.orderType}</td>
-                <td>{o.price}</td>
-                <td>{o.size}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+    <table className="w-full text-left text-xs">
+      <thead>
+        <tr className="text-text-muted">
+          <th className="px-3 py-2 font-medium">Symbol</th>
+          <th className="px-3 py-2 font-medium">Side</th>
+          <th className="px-3 py-2 font-medium">Type</th>
+          <th className="px-3 py-2 font-medium">Price</th>
+          <th className="px-3 py-2 font-medium">Size</th>
+        </tr>
+      </thead>
+      <tbody>
+        {orders.map((o) => (
+          <tr key={o.id} className="border-t border-border">
+            <td className="px-3 py-2">{o.symbol}</td>
+            <td className={`px-3 py-2 capitalize ${o.side === "buy" ? "text-buy" : "text-sell"}`}>{o.side}</td>
+            <td className="px-3 py-2 capitalize">{o.orderType}</td>
+            <td className="px-3 py-2">{o.price}</td>
+            <td className="px-3 py-2">{o.size}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

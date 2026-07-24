@@ -47,5 +47,5 @@ const PriceLevel& OrderBookSide::top() const {
 }
 
 std::span<const PriceLevel> OrderBookSide::depth(size_t n) const {
-    return std::span<const PriceLevel>(levels_.data(), std::min(n, levels_.size()));
+    return std::span<const PriceLevel>{levels_.data(), std::min(n, levels_.size())};
 }

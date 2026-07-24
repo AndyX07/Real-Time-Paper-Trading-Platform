@@ -50,15 +50,15 @@ std::optional<SymbolPrecision> fetchKrakenAssetPairPrecision(std::string_view sy
         asio::io_context ioContext;
         asio::ssl::context sslContext{asio::ssl::context::tlsv13_client};
 
-        tcp::resolver resolver(ioContext);
+        tcp::resolver resolver{ioContext};
         auto const results = resolver.resolve(kHost, kPort);
 
-        beast::ssl_stream<beast::tcp_stream> stream(ioContext, sslContext);
+        beast::ssl_stream<beast::tcp_stream> stream{ioContext, sslContext};
         if (!SSL_set_tlsext_host_name(stream.native_handle(), kHost)) {
             return std::nullopt;
         }
 
-        SyncTimeoutGuard timeoutGuard(beast::get_lowest_layer(stream), kRequestTimeout);
+        SyncTimeoutGuard timeoutGuard{beast::get_lowest_layer(stream), kRequestTimeout};
 
         beast::get_lowest_layer(stream).connect(results);
         stream.handshake(asio::ssl::stream_base::client);
@@ -80,7 +80,7 @@ std::optional<SymbolPrecision> fetchKrakenAssetPairPrecision(std::string_view sy
             return std::nullopt;
         }
 
-        simdjson::padded_string json(res.body());
+        simdjson::padded_string json{res.body()};
         simdjson::ondemand::parser parser;
         simdjson::ondemand::document doc = parser.iterate(json);
 

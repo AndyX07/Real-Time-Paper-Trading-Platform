@@ -11,14 +11,14 @@
 class IdleTimeoutWatchdog {
 public:
     IdleTimeoutWatchdog(boost::beast::tcp_stream& stream, std::chrono::steady_clock::duration timeout)
-        : stream_(stream), timeout_(timeout), thread_([this] { run(); }) {}
+        : stream_{stream}, timeout_{timeout}, thread_{[this] { run(); }} {}
 
     IdleTimeoutWatchdog(const IdleTimeoutWatchdog&) = delete;
     IdleTimeoutWatchdog& operator=(const IdleTimeoutWatchdog&) = delete;
 
     ~IdleTimeoutWatchdog() {
         {
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock{mutex_};
             done_ = true;
         }
         cv_.notify_one();
@@ -26,14 +26,14 @@ public:
     }
 
     void kick() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock{mutex_};
         deadline_ = std::chrono::steady_clock::now() + timeout_;
         cv_.notify_one();
     }
 
 private:
     void run() {
-        std::unique_lock<std::mutex> lock(mutex_);
+        std::unique_lock<std::mutex> lock{mutex_};
         deadline_ = std::chrono::steady_clock::now() + timeout_;
         while (!done_) {
             cv_.wait_until(lock, deadline_);
