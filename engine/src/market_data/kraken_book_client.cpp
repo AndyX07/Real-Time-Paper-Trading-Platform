@@ -34,9 +34,10 @@ constexpr std::chrono::seconds kSnapshotInterval{5};
 }
 
 KrakenBookClient::KrakenBookClient(std::string symbol, OrderBook& book, BookDeltaCallback onDelta,
-                                    BookSnapshotCallback onSnapshot, int priceDecimals, int quantityDecimals)
+                                    BookSnapshotCallback onSnapshot, int priceDecimals, int quantityDecimals,
+                                    TickCallback onTick)
     : symbol_{std::move(symbol)}, book_{book}, onDelta_{std::move(onDelta)}, onSnapshot_{std::move(onSnapshot)},
-      priceDecimals_{priceDecimals}, quantityDecimals_{quantityDecimals} {}
+      onTick_{std::move(onTick)}, priceDecimals_{priceDecimals}, quantityDecimals_{quantityDecimals} {}
 
 void KrakenBookClient::connect() {
     namespace ssl = asio::ssl;
@@ -166,10 +167,13 @@ void KrakenBookClient::maybePublishSnapshot() {
 
 void KrakenBookClient::handleMessage(std::string_view raw) {
     auto message = parseBookMessage(parser_, raw);
-    if (!message) {
-        return;
+    if (message) {
+        applyMessage(*message);
     }
-    applyMessage(*message);
+    
+    if (onTick_) {
+        onTick_();
+    }
 }
 
 void KrakenBookClient::run() {

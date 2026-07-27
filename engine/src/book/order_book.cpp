@@ -49,3 +49,13 @@ const PriceLevel& OrderBookSide::top() const {
 std::span<const PriceLevel> OrderBookSide::depth(size_t n) const {
     return std::span<const PriceLevel>{levels_.data(), std::min(n, levels_.size())};
 }
+
+Quantity OrderBookSide::sizeAtPrice(Price price) const {
+    auto it = std::lower_bound(
+        levels_.begin(), levels_.end(), price,
+        [this](const PriceLevel& level, Price target) { return better(level.price, target); });
+    if (it != levels_.end() && it->price == price) {
+        return it->quantity;
+    }
+    return Quantity{0};
+}

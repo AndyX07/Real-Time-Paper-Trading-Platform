@@ -19,6 +19,8 @@ public:
     void clear();
     const PriceLevel& top() const;
     std::span<const PriceLevel> depth(size_t n) const;
+    // used to seed order's queueAheadSize
+    Quantity sizeAtPrice(Price price) const;
 
 private:
     bool better(Price a, Price b) const;
