@@ -1,6 +1,8 @@
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <string>
 
 #include <grpcpp/grpcpp.h>
@@ -17,12 +19,19 @@ std::string controlPlaneAddress() {
     return "127.0.0.1:" + std::string(port ? port : "50051");
 }
 
+uint64_t generateInstanceId() {
+    std::random_device rd;
+    std::mt19937_64 gen{rd()};
+    std::uniform_int_distribution<uint64_t> dist;
+    return dist(gen);
+}
+
 }
 
 int main() {
     SharedMemoryManager sharedMemory;
     SymbolRegistry symbolRegistry{sharedMemory, fetchKrakenAssetPairPrecision};
-    ControlServiceImpl service{symbolRegistry};
+    ControlServiceImpl service{symbolRegistry, generateInstanceId()};
 
     std::string address = controlPlaneAddress();
     grpc::ServerBuilder builder;

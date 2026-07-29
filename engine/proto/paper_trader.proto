@@ -9,6 +9,8 @@ service EngineControl {
   rpc CancelOrder(CancelOrderRequest) returns (OrderReply);
 
   rpc WatchFills(WatchFillsRequest) returns (stream FillEvent);
+
+  rpc GetEngineInfo(EngineInfoRequest) returns (EngineInfoReply);
 }
 
 enum Side { BID = 0; ASK = 1; }
@@ -41,3 +43,10 @@ message FillEvent {
   int64 size_ticks = 3;
   uint64 ts = 4;
 }
+
+message EngineInfoRequest {}
+// instance_id is generated once per engine process at startup -- a client
+// that sees it change knows it's talking to a different process than
+// before, even across its own restarts (it's not tied to any one client's
+// connection or session).
+message EngineInfoReply { uint64 instance_id = 1; }

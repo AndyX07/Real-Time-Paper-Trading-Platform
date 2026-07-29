@@ -12,6 +12,15 @@ import (
 	pb "papertrader/backend/genproto"
 )
 
+// OrderResult mirrors OrderReply (paper_trader.proto) -- shared shape for
+// both PlaceOrder and CancelOrder replies, same as the engine's own
+// OrderResult that produces it.
+type OrderResult struct {
+	Accepted      bool
+	EngineOrderID uint64
+	RejectReason  string
+}
+
 func engineAddress() string {
 	host := os.Getenv("ENGINE_GRPC_HOST")
 	if host == "" {
@@ -77,4 +86,49 @@ func (e *EngineClient) UnsubscribeBook(ctx context.Context, symbol string) Subsc
 		return SubscribeResult{Ok: false, Reason: fmt.Sprintf("engine unreachable: %v", err)}
 	}
 	return SubscribeResult{Ok: reply.GetOk(), Reason: reply.GetReason()}
+}
+
+func (e *EngineClient) PlaceOrder(ctx context.Context, symbol, side, orderType string, priceTicks, sizeTicks int64,
+	clientRequestID string) OrderResult {
+	pbSide := pb.Side_BID
+	if side == "sell" {
+		pbSide = pb.Side_ASK
+	}
+	pbType := pb.OrderType_LIMIT
+	if orderType == "market" {
+		pbType = pb.OrderType_MARKET
+	}
+
+	reply, err := e.client.PlaceOrder(ctx, &pb.PlaceOrderRequest{
+		Symbol: symbol, Side: pbSide, Type: pbType, PriceTicks: priceTicks, SizeTicks: sizeTicks,
+		ClientRequestId: clientRequestID,
+	})
+	if err != nil {
+		slog.Error("control.engine_client RPC failed", "rpc", "PlaceOrder", "symbol", symbol, "error", err)
+		return OrderResult{Accepted: false, RejectReason: fmt.Sprintf("engine unreachable: %v", err)}
+	}
+	return OrderResult{Accepted: reply.GetAccepted(), EngineOrderID: reply.GetEngineOrderId(),
+		RejectReason: reply.GetRejectReason()}
+}
+
+func (e *EngineClient) CancelOrder(ctx context.Context, engineOrderID uint64) OrderResult {
+	reply, err := e.client.CancelOrder(ctx, &pb.CancelOrderRequest{EngineOrderId: engineOrderID})
+	if err != nil {
+		slog.Error("control.engine_client RPC failed", "rpc", "CancelOrder", "error", err)
+		return OrderResult{Accepted: false, RejectReason: fmt.Sprintf("engine unreachable: %v", err)}
+	}
+	return OrderResult{Accepted: reply.GetAccepted(), EngineOrderID: reply.GetEngineOrderId(),
+		RejectReason: reply.GetRejectReason()}
+}
+
+func (e *EngineClient) WatchFills(ctx context.Context) (grpc.ServerStreamingClient[pb.FillEvent], error) {
+	return e.client.WatchFills(ctx, &pb.WatchFillsRequest{})
+}
+
+func (e *EngineClient) GetEngineInfo(ctx context.Context) (uint64, error) {
+	reply, err := e.client.GetEngineInfo(ctx, &pb.EngineInfoRequest{})
+	if err != nil {
+		return 0, fmt.Errorf("control.engine_client: GetEngineInfo: %w", err)
+	}
+	return reply.GetInstanceId(), nil
 }

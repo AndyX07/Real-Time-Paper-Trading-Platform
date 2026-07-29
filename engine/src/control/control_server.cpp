@@ -22,7 +22,8 @@ void fillOrderReply(const OrderResult& result, paper_trader::OrderReply* respons
 
 }
 
-ControlServiceImpl::ControlServiceImpl(SymbolRegistry& symbolRegistry) : symbolRegistry_{symbolRegistry} {}
+ControlServiceImpl::ControlServiceImpl(SymbolRegistry& symbolRegistry, uint64_t instanceId)
+    : symbolRegistry_{symbolRegistry}, instanceId_{instanceId} {}
 
 grpc::Status ControlServiceImpl::SubscribeBook(grpc::ServerContext*, const paper_trader::SubscribeRequest* request,
                                                 paper_trader::SubscribeReply* response) {
@@ -74,5 +75,11 @@ grpc::Status ControlServiceImpl::WatchFills(grpc::ServerContext* context, const 
             break; // client disconnected
         }
     }
+    return grpc::Status::OK;
+}
+
+grpc::Status ControlServiceImpl::GetEngineInfo(grpc::ServerContext*, const paper_trader::EngineInfoRequest*,
+                                                paper_trader::EngineInfoReply* response) {
+    response->set_instance_id(instanceId_);
     return grpc::Status::OK;
 }

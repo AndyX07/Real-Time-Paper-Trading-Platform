@@ -13,7 +13,9 @@ import (
 	"papertrader/backend/internal/candle"
 	"papertrader/backend/internal/config"
 	"papertrader/backend/internal/control"
+	"papertrader/backend/internal/persistence"
 	"papertrader/backend/internal/symbols"
+	"papertrader/backend/internal/trading"
 )
 
 func withCORS(next http.Handler) http.Handler {
@@ -48,6 +50,18 @@ func main() {
 	bookRouter.Start(ctx)
 	defer bookRouter.Stop()
 
+	db, err := persistence.Open(config.DBPath())
+	if err != nil {
+		slog.Error("main: failed to open persistence db", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	repo := persistence.NewRepository(db)
+
+	tradingRouter := trading.NewRouter(engineClient, repo)
+	tradingRouter.Start(ctx)
+	defer tradingRouter.Stop()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -57,6 +71,7 @@ func main() {
 	mux.HandleFunc("/api/candles/history", candleRouter.HandleHistory)
 	mux.HandleFunc("/ws/candles", candleRouter.HandleWS)
 	mux.HandleFunc("/ws/book", bookRouter.HandleWS)
+	mux.HandleFunc("/ws/control", tradingRouter.HandleWS)
 
 	addr := config.Host() + ":" + config.Port()
 	server := &http.Server{Addr: addr, Handler: withCORS(mux)}

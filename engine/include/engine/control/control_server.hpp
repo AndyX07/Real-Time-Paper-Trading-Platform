@@ -5,7 +5,7 @@
 
 class ControlServiceImpl final : public paper_trader::EngineControl::Service {
 public:
-    explicit ControlServiceImpl(SymbolRegistry& symbolRegistry);
+    ControlServiceImpl(SymbolRegistry& symbolRegistry, uint64_t instanceId);
 
     grpc::Status SubscribeBook(grpc::ServerContext* context, const paper_trader::SubscribeRequest* request,
                                 paper_trader::SubscribeReply* response) override;
@@ -19,6 +19,10 @@ public:
     grpc::Status WatchFills(grpc::ServerContext* context, const paper_trader::WatchFillsRequest* request,
                              grpc::ServerWriter<paper_trader::FillEvent>* writer) override;
 
+    grpc::Status GetEngineInfo(grpc::ServerContext* context, const paper_trader::EngineInfoRequest* request,
+                                paper_trader::EngineInfoReply* response) override;
+
 private:
     SymbolRegistry& symbolRegistry_;
+    uint64_t instanceId_;
 };
