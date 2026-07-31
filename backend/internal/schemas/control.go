@@ -65,22 +65,40 @@ type PositionSnapshot struct {
 }
 
 type OrderUpdateMessage struct {
-	Type         string `json:"type"`
-	OrderID      int64  `json:"orderId"`
-	Status       string `json:"status"`
-	CancelReason string `json:"cancelReason,omitempty"`
+	Type  string        `json:"type"`
+	Order OrderSnapshot `json:"order"`
 }
 
-func NewOrderUpdateMessage(orderID int64, status, cancelReason string) OrderUpdateMessage {
-	return OrderUpdateMessage{Type: "order_update", OrderID: orderID, Status: status, CancelReason: cancelReason}
+func NewOrderUpdateMessage(order OrderSnapshot) OrderUpdateMessage {
+	return OrderUpdateMessage{Type: "order_update", Order: order}
+}
+
+type FillSnapshot struct {
+	OrderID    int64  `json:"orderId"`
+	Symbol     string `json:"symbol"`
+	Side       string `json:"side"`
+	PriceTicks int64  `json:"priceTicks"`
+	SizeTicks  int64  `json:"sizeTicks"`
+	Ts         int64  `json:"ts"`
+}
+
+type PositionsUpdateMessage struct {
+	Type      string             `json:"type"`
+	Positions []PositionSnapshot `json:"positions"`
+}
+
+func NewPositionsUpdateMessage(positions []PositionSnapshot) PositionsUpdateMessage {
+	return PositionsUpdateMessage{Type: "positions_update", Positions: positions}
 }
 
 type StateSnapshotMessage struct {
 	Type      string             `json:"type"`
 	Orders    []OrderSnapshot    `json:"orders"`
 	Positions []PositionSnapshot `json:"positions"`
+	Fills     []FillSnapshot     `json:"fills"`
 }
 
-func NewStateSnapshotMessage(orders []OrderSnapshot, positions []PositionSnapshot) StateSnapshotMessage {
-	return StateSnapshotMessage{Type: "state_snapshot", Orders: orders, Positions: positions}
+func NewStateSnapshotMessage(orders []OrderSnapshot, positions []PositionSnapshot,
+	fills []FillSnapshot) StateSnapshotMessage {
+	return StateSnapshotMessage{Type: "state_snapshot", Orders: orders, Positions: positions, Fills: fills}
 }

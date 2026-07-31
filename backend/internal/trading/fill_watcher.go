@@ -121,6 +121,14 @@ func (f *FillWatcher) handleFill(event *pb.FillEvent) {
 
 	f.clients.Broadcast(schemas.NewFillEventMessage(localOrderID, event.GetPriceTicks(), event.GetSizeTicks(),
 		event.GetTs()))
+	broadcastOrderUpdate(f.repo, f.clients, localOrderID)
+
+	positions, err := f.repo.GetPositions()
+	if err != nil {
+		slog.Error("trading.fill_watcher: get positions for update broadcast failed", "error", err)
+		return
+	}
+	f.clients.Broadcast(schemas.NewPositionsUpdateMessage(toPositionSnapshots(positions)))
 }
 
 func (f *FillWatcher) reconcileEngineInstance(ctx context.Context) {
@@ -139,14 +147,14 @@ func (f *FillWatcher) reconcileEngineInstance(ctx context.Context) {
 	}
 
 	if !hadLastID || lastID != instanceID {
-		orderIDs, err := f.repo.CancelOpenOrdersForEngineRestart()
+		orders, err := f.repo.CancelOpenOrdersForEngineRestart()
 		if err != nil {
 			slog.Error("trading.fill_watcher: cancel open orders for engine restart failed", "error", err)
-		} else if len(orderIDs) > 0 {
+		} else if len(orders) > 0 {
 			slog.Warn("trading.fill_watcher: engine instance changed, canceled stale open orders",
-				"count", len(orderIDs))
-			for _, orderID := range orderIDs {
-				f.clients.Broadcast(schemas.NewOrderUpdateMessage(orderID, "canceled", "engine_restart"))
+				"count", len(orders))
+			for _, order := range orders {
+				f.clients.Broadcast(schemas.NewOrderUpdateMessage(toOrderSnapshot(order)))
 			}
 		}
 	}

@@ -59,10 +59,16 @@ func (r *Repository) CreatePendingOrder(symbol, side, orderType string, priceTic
 	return res.LastInsertId()
 }
 
-func (r *Repository) MarkOrderAccepted(orderID int64, engineOrderID uint64) error {
+func (r *Repository) MarkOrderAccepted(orderID int64, engineOrderID uint64, expectedFillTicks int64) error {
+	status := "open"
+	engineOrderIDToStore := sql.NullInt64{Int64: int64(engineOrderID), Valid: true}
+	if expectedFillTicks <= 0 {
+		status = "unfilled"
+		engineOrderIDToStore = sql.NullInt64{} // terminal -- same reasoning as MarkOrderCanceled
+	}
 	_, err := r.db.Exec(
-		`UPDATE orders SET status = 'open', engine_order_id = ?, updated_at = ? WHERE order_id = ?`,
-		int64(engineOrderID), time.Now().UnixNano(), orderID,
+		`UPDATE orders SET status = ?, engine_order_id = ?, expected_fill_ticks = ?, updated_at = ? WHERE order_id = ?`,
+		status, engineOrderIDToStore, expectedFillTicks, time.Now().UnixNano(), orderID,
 	)
 	if err != nil {
 		return fmt.Errorf("persistence: mark order accepted: %w", err)
@@ -127,9 +133,9 @@ func (r *Repository) RecordFill(engineOrderID uint64, priceTicks, sizeTicks int6
 		}
 	}()
 
-	var localOrderID, orderSizeTicks int64
-	err = tx.QueryRow(`SELECT order_id, size_ticks FROM orders WHERE engine_order_id = ?`, int64(engineOrderID)).
-		Scan(&localOrderID, &orderSizeTicks)
+	var localOrderID, expectedFillTicks int64
+	err = tx.QueryRow(`SELECT order_id, expected_fill_ticks FROM orders WHERE engine_order_id = ?`, int64(engineOrderID)).
+		Scan(&localOrderID, &expectedFillTicks)
 	if err == sql.ErrNoRows {
 		err = ErrOrderNotFound
 		return 0, err
@@ -158,7 +164,7 @@ func (r *Repository) RecordFill(engineOrderID uint64, priceTicks, sizeTicks int6
 	// since more fills against this exact order are still expected.
 	status := "partially_filled"
 	keepEngineOrderID := sql.NullInt64{Int64: int64(engineOrderID), Valid: true}
-	if totalFilled >= orderSizeTicks {
+	if totalFilled >= expectedFillTicks {
 		status = "filled"
 		keepEngineOrderID = sql.NullInt64{}
 	}
@@ -219,6 +225,37 @@ func (r *Repository) GetAllOrders() ([]Order, error) {
 		orders = append(orders, o)
 	}
 	return orders, rows.Err()
+}
+
+type Fill struct {
+	OrderID    int64
+	Symbol     string
+	Side       string
+	PriceTicks int64
+	SizeTicks  int64
+	Ts         int64
+}
+
+func (r *Repository) GetFills() ([]Fill, error) {
+	rows, err := r.db.Query(
+		`SELECT f.order_id, o.symbol, o.side, f.price_ticks, f.size_ticks, f.ts
+		 FROM fills f JOIN orders o ON f.order_id = o.order_id
+		 ORDER BY f.fill_id ASC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("persistence: get fills: %w", err)
+	}
+	defer rows.Close()
+
+	var fills []Fill
+	for rows.Next() {
+		var f Fill
+		if err := rows.Scan(&f.OrderID, &f.Symbol, &f.Side, &f.PriceTicks, &f.SizeTicks, &f.Ts); err != nil {
+			return nil, fmt.Errorf("persistence: get fills: scan: %w", err)
+		}
+		fills = append(fills, f)
+	}
+	return fills, rows.Err()
 }
 
 // lot is one still-open (partially or fully unmatched) fill, oldest first.
@@ -358,11 +395,12 @@ func (r *Repository) SetLastEngineInstanceID(id uint64) error {
 	return nil
 }
 
-func (r *Repository) CancelOpenOrdersForEngineRestart() ([]int64, error) {
+func (r *Repository) CancelOpenOrdersForEngineRestart() ([]Order, error) {
 	rows, err := r.db.Query(
 		`UPDATE orders SET status = 'canceled', cancel_reason = 'engine_restart', engine_order_id = NULL, updated_at = ?
 		 WHERE status IN ('pending', 'open', 'partially_filled')
-		 RETURNING order_id`,
+		 RETURNING order_id, engine_order_id, symbol, side, order_type, price_ticks, size_ticks, status,
+		           cancel_reason, reject_reason, client_request_id, created_at, updated_at`,
 		time.Now().UnixNano(),
 	)
 	if err != nil {
@@ -370,13 +408,15 @@ func (r *Repository) CancelOpenOrdersForEngineRestart() ([]int64, error) {
 	}
 	defer rows.Close()
 
-	var orderIDs []int64
+	var orders []Order
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var o Order
+		if err := rows.Scan(&o.OrderID, &o.EngineOrderID, &o.Symbol, &o.Side, &o.OrderType, &o.PriceTicks,
+			&o.SizeTicks, &o.Status, &o.CancelReason, &o.RejectReason, &o.ClientRequestID, &o.CreatedAt,
+			&o.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("persistence: cancel open orders for engine restart: scan: %w", err)
 		}
-		orderIDs = append(orderIDs, id)
+		orders = append(orders, o)
 	}
-	return orderIDs, rows.Err()
+	return orders, rows.Err()
 }

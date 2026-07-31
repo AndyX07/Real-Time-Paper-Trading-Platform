@@ -16,9 +16,10 @@ import (
 // both PlaceOrder and CancelOrder replies, same as the engine's own
 // OrderResult that produces it.
 type OrderResult struct {
-	Accepted      bool
-	EngineOrderID uint64
-	RejectReason  string
+	Accepted        bool
+	EngineOrderID   uint64
+	RejectReason    string
+	FilledSizeTicks int64
 }
 
 func engineAddress() string {
@@ -108,7 +109,7 @@ func (e *EngineClient) PlaceOrder(ctx context.Context, symbol, side, orderType s
 		return OrderResult{Accepted: false, RejectReason: fmt.Sprintf("engine unreachable: %v", err)}
 	}
 	return OrderResult{Accepted: reply.GetAccepted(), EngineOrderID: reply.GetEngineOrderId(),
-		RejectReason: reply.GetRejectReason()}
+		RejectReason: reply.GetRejectReason(), FilledSizeTicks: reply.GetFilledSizeTicks()}
 }
 
 func (e *EngineClient) CancelOrder(ctx context.Context, engineOrderID uint64) OrderResult {

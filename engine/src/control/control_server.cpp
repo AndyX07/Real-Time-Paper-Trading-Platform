@@ -18,6 +18,7 @@ void fillOrderReply(const OrderResult& result, paper_trader::OrderReply* respons
     response->set_accepted(result.accepted);
     response->set_engine_order_id(result.orderId);
     response->set_reject_reason(result.rejectReason);
+    response->set_filled_size_ticks(result.filledSize.ticks);
 }
 
 }

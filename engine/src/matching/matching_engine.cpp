@@ -75,7 +75,7 @@ OrderResult MatchingEngine::placeOrder(uint64_t orderId, BookSide side, OrderTyp
         restingOrders_.emplace(orderId, std::move(order));
     }
 
-    return {true, orderId, ""};
+    return {true, orderId, "", size - remaining};
 }
 
 OrderResult MatchingEngine::cancelOrder(uint64_t orderId) {

@@ -14,3 +14,7 @@ dist/
 backend/genproto/
 backend/.tools/
 backend/server.exe
+backend/paper_trader.db
+backend/paper_trader.db-shm
+backend/paper_trader.db-wal
+backend/*.log

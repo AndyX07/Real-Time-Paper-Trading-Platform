@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS orders (
     reject_reason     TEXT,
     client_request_id TEXT    NOT NULL,
     created_at        INTEGER NOT NULL,
-    updated_at        INTEGER NOT NULL
+    updated_at        INTEGER NOT NULL,
+    expected_fill_ticks INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS fills (
@@ -61,5 +62,6 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("persistence: create schema: %w", err)
 	}
+
 	return db, nil
 }

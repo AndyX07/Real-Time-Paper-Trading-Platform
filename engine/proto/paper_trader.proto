@@ -34,6 +34,8 @@ message OrderReply {
   bool accepted = 1;
   uint64 engine_order_id = 2;
   string reject_reason = 3;
+  // synchronous match amount for PlaceOrder
+  int64 filled_size_ticks = 4;
 }
 
 message WatchFillsRequest {}

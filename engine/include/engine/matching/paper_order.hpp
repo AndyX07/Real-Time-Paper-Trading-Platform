@@ -37,4 +37,6 @@ struct OrderResult {
     bool accepted;
     uint64_t orderId; // set if accepted
     std::string rejectReason; // set if rejected
+    // how much quantity matched synchronously
+    Quantity filledSize{};
 };

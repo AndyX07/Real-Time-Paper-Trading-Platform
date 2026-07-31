@@ -114,21 +114,47 @@ func (r *Router) sendInitialSnapshot(client *ClientState) {
 	if err != nil {
 		slog.Error("trading.router: get positions failed", "error", err)
 	}
+	fills, err := r.repo.GetFills()
+	if err != nil {
+		slog.Error("trading.router: get fills failed", "error", err)
+	}
 
 	orderSnapshots := make([]schemas.OrderSnapshot, len(orders))
 	for i, o := range orders {
 		orderSnapshots[i] = toOrderSnapshot(o)
 	}
 
-	positionSnapshots := make([]schemas.PositionSnapshot, len(positions))
+	positionSnapshots := toPositionSnapshots(positions)
+
+	fillSnapshots := make([]schemas.FillSnapshot, len(fills))
+	for i, f := range fills {
+		fillSnapshots[i] = schemas.FillSnapshot{
+			OrderID: f.OrderID, Symbol: f.Symbol, Side: f.Side, PriceTicks: f.PriceTicks,
+			SizeTicks: f.SizeTicks, Ts: f.Ts,
+		}
+	}
+
+	client.Enqueue(schemas.NewStateSnapshotMessage(orderSnapshots, positionSnapshots, fillSnapshots))
+}
+
+func broadcastOrderUpdate(repo *persistence.Repository, clients *ClientRegistry, orderID int64) {
+	order, err := repo.GetOrder(orderID)
+	if err != nil {
+		slog.Error("trading: get order for update broadcast failed", "orderId", orderID, "error", err)
+		return
+	}
+	clients.Broadcast(schemas.NewOrderUpdateMessage(toOrderSnapshot(order)))
+}
+
+func toPositionSnapshots(positions []persistence.Position) []schemas.PositionSnapshot {
+	snapshots := make([]schemas.PositionSnapshot, len(positions))
 	for i, p := range positions {
-		positionSnapshots[i] = schemas.PositionSnapshot{
+		snapshots[i] = schemas.PositionSnapshot{
 			Symbol: p.Symbol, NetSizeTicks: p.NetSizeTicks, AvgCostTicks: p.AvgCostTicks,
 			RealizedPnLTicks: p.RealizedPnLTicks,
 		}
 	}
-
-	client.Enqueue(schemas.NewStateSnapshotMessage(orderSnapshots, positionSnapshots))
+	return snapshots
 }
 
 func toOrderSnapshot(o persistence.Order) schemas.OrderSnapshot {
@@ -200,13 +226,19 @@ func (r *Router) handlePlaceOrder(ctx context.Context, msg incomingMessage) {
 		if err := r.repo.MarkOrderRejected(orderID, result.RejectReason); err != nil {
 			slog.Error("trading.router: mark order rejected failed", "orderId", orderID, "error", err)
 		}
+		broadcastOrderUpdate(r.repo, r.clients, orderID)
 		r.clients.Broadcast(schemas.NewOrderAckMessage(msg.ClientRequestID, orderID, "rejected", result.RejectReason))
 		return
 	}
 
-	if err := r.repo.MarkOrderAccepted(orderID, result.EngineOrderID); err != nil {
+	expectedFillTicks := sizeTicks
+	if msg.OrderType == "market" {
+		expectedFillTicks = result.FilledSizeTicks
+	}
+	if err := r.repo.MarkOrderAccepted(orderID, result.EngineOrderID, expectedFillTicks); err != nil {
 		slog.Error("trading.router: mark order accepted failed", "orderId", orderID, "error", err)
 	}
+	broadcastOrderUpdate(r.repo, r.clients, orderID)
 	r.clients.Broadcast(schemas.NewOrderAckMessage(msg.ClientRequestID, orderID, "accepted", ""))
 }
 
@@ -232,5 +264,6 @@ func (r *Router) handleCancelOrder(ctx context.Context, msg incomingMessage) {
 	if err := r.repo.MarkOrderCanceled(msg.OrderID, "user"); err != nil {
 		slog.Error("trading.router: mark order canceled failed", "orderId", msg.OrderID, "error", err)
 	}
+	broadcastOrderUpdate(r.repo, r.clients, msg.OrderID)
 	r.clients.Broadcast(schemas.NewOrderAckMessage(msg.ClientRequestID, msg.OrderID, "accepted", ""))
 }
