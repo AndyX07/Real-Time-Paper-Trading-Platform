@@ -3,6 +3,22 @@ import type { CandleMessage } from "../types/candle";
 
 const CANDLE_WS_URL = "ws://localhost:8000/ws/candles";
 
+// Aborting a still-CONNECTING socket can leave the underlying handshake in
+// a state that interferes with an immediate reconnect to the same
+// host:port on some platforms -- exactly what React StrictMode's
+// synchronous mount->cleanup->remount does in dev (observed: it broke the
+// very first connection every time until this was fixed). Deferring the
+// close until the socket actually finishes opening avoids ever aborting a
+// handshake mid-flight.
+function closeSafely(ws: WebSocket | null) {
+  if (!ws) return;
+  if (ws.readyState === WebSocket.CONNECTING) {
+    ws.addEventListener("open", () => ws.close());
+  } else {
+    ws.close();
+  }
+}
+
 export function useCandleSocket(
   symbol: string,
   intervalMinutes: number,
@@ -62,7 +78,7 @@ export function useCandleSocket(
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "unsubscribe_candle", symbol, interval: intervalMinutes }));
       }
-      ws?.close();
+      closeSafely(ws);
     };
   }, [symbol, intervalMinutes]);
 }

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { OrderAckMessage } from "../../types/control";
 
-export interface FakeOrder {
-  id: string;
+interface PlaceOrderParams {
   symbol: string;
   side: "buy" | "sell";
   orderType: "market" | "limit";
@@ -11,34 +11,50 @@ export interface FakeOrder {
 
 interface OrderEntryProps {
   symbol: string;
-  onOrderFilled: (order: FakeOrder) => void;
+  placeOrder: (params: PlaceOrderParams) => string | null;
+  lastAck: OrderAckMessage | null;
 }
 
-export function OrderEntry({ symbol, onOrderFilled }: OrderEntryProps) {
+export function OrderEntry({ symbol, placeOrder, lastAck }: OrderEntryProps) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("limit");
   const [price, setPrice] = useState("");
   const [size, setSize] = useState("");
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // order_ack is broadcast to every connected client, so this only reacts
+  // once lastAck.clientRequestId matches the request this form itself
+  // made -- the accompanying order_update (handled by useControlSocket)
+  // is what actually populates the orders list, for this tab and every
+  // other one; this effect only resolves this form's own pending-submit UI.
+  useEffect(() => {
+    if (!pendingId || !lastAck || lastAck.clientRequestId !== pendingId) return;
+    setPendingId(null);
+    if (lastAck.status === "rejected") {
+      setError(lastAck.reason ?? "order rejected");
+    } else {
+      setError(null);
+      setSize("");
+      setPrice("");
+    }
+  }, [lastAck, pendingId]);
 
   const total = orderType === "limit" && price && size ? Number(price) * Number(size) : null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!size) return;
-
-    // TEMPORARY fake fill -- see file header. Real order placement goes
-    // through useControlSocket -> place_order -> awaits order_ack/fill.
-    const fakeOrder: FakeOrder = {
-      id: `fake-${Date.now()}`,
-      symbol,
-      side,
-      orderType,
-      price: orderType === "limit" ? price : "market",
-      size,
-    };
-    onOrderFilled(fakeOrder);
-    setSize("");
-    setPrice("");
+    if (!size || pendingId) return;
+    const clientRequestId = placeOrder({ symbol, side, orderType, price, size });
+    if (clientRequestId == null) {
+      // Not connected right now -- fail immediately rather than entering a
+      // pending state that would never resolve (no message was actually
+      // sent, so no ack is ever coming).
+      setError("not connected -- try again in a moment");
+      return;
+    }
+    setError(null);
+    setPendingId(clientRequestId);
   }
 
   const [base, quote] = symbol.split("/");
@@ -119,16 +135,15 @@ export function OrderEntry({ symbol, onOrderFilled }: OrderEntryProps) {
 
         <button
           type="submit"
-          className={`mt-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors ${
+          disabled={pendingId != null}
+          className={`mt-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
             side === "buy" ? "bg-buy hover:opacity-90" : "bg-sell hover:opacity-90"
           }`}
         >
-          {side === "buy" ? "Buy" : "Sell"} {base} (fake fill)
+          {pendingId != null ? "Placing..." : `${side === "buy" ? "Buy" : "Sell"} ${base}`}
         </button>
 
-        <p className="text-center text-[11px] text-text-muted">
-          Paper trading only -- fills are simulated, not routed to the engine yet.
-        </p>
+        {error && <p className="text-center text-[11px] text-sell">{error}</p>}
       </div>
     </form>
   );

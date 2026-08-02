@@ -7,6 +7,10 @@ interface OrderBookLadderProps {
   symbol: string;
   priceDecimals: number;
   quantityDecimals: number;
+  // Piggybacks on the existing rAF loop below rather than opening a second
+  // book subscription -- lets a caller (PnlDisplay, via App.tsx) get the
+  // live mid for whichever symbol's ladder is actually mounted.
+  onMidPrice?: (bestBid: number, bestAsk: number) => void;
 }
 
 const LEVELS_PER_SIDE = 12;
@@ -18,9 +22,11 @@ interface LadderSnapshot {
 
 const EMPTY: LadderSnapshot = { asks: [], bids: [] };
 
-export function OrderBookLadder({ symbol, priceDecimals, quantityDecimals }: OrderBookLadderProps) {
+export function OrderBookLadder({ symbol, priceDecimals, quantityDecimals, onMidPrice }: OrderBookLadderProps) {
   const storeRef = useRef(new BookStore());
   const [snapshot, setSnapshot] = useState<LadderSnapshot>(EMPTY);
+  const onMidPriceRef = useRef(onMidPrice);
+  onMidPriceRef.current = onMidPrice;
 
   // Fresh store per symbol -- a stale book from the previous symbol must
   // never bleed into the next one's first frame.
@@ -36,10 +42,6 @@ export function OrderBookLadder({ symbol, priceDecimals, quantityDecimals }: Ord
       storeRef.current.applyDelta(msg);
     }
   });
-
-  // requestAnimationFrame render loop, deliberately decoupled from the
-  // WebSocket message rate (ARCHITECTURE.md 4.7) -- reads whatever's
-  // currently in storeRef, never the message stream directly.
   useEffect(() => {
     let rafId: number;
     function frame() {
@@ -47,6 +49,9 @@ export function OrderBookLadder({ symbol, priceDecimals, quantityDecimals }: Ord
       const asks = buildLadderLevels(store.getAsks(), (a, b) => a - b, LEVELS_PER_SIDE);
       const bids = buildLadderLevels(store.getBids(), (a, b) => b - a, LEVELS_PER_SIDE);
       setSnapshot({ asks, bids });
+      if (bids[0] != null && asks[0] != null) {
+        onMidPriceRef.current?.(bids[0].price, asks[0].price);
+      }
       rafId = requestAnimationFrame(frame);
     }
     rafId = requestAnimationFrame(frame);

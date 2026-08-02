@@ -1,19 +1,36 @@
 import { useState } from "react";
-import type { FakeOrder } from "../OrderEntry/OrderEntry";
+import type { FillSnapshot, OrderAckMessage, OrderSnapshot, PositionSnapshot } from "../../types/control";
 import { OpenOrders } from "../OpenOrders/OpenOrders";
+import { FillHistory } from "../FillHistory/FillHistory";
+import { PnlDisplay } from "../PnlDisplay/PnlDisplay";
 
-const TABS = ["Balances", "Positions", "Open Orders", "Conditional Orders", "Portfolio", "Closed Orders", "Trades"] as const;
+const TABS = ["Positions", "Open Orders", "Closed Orders", "Trades"] as const;
+
+const OPEN_STATUSES = new Set(["pending", "open", "partially_filled"]);
 
 interface BottomPanelProps {
-  orders: FakeOrder[];
+  orders: OrderSnapshot[];
+  positions: PositionSnapshot[];
+  fills: FillSnapshot[];
+  cancelOrder: (orderId: number) => string | null;
+  lastAck: OrderAckMessage | null;
+  selectedSymbol: string;
+  midPrice: number | null;
 }
 
-// Only "Open Orders" has real (fake-fill) data behind it right now --
-// FillHistory/PnlDisplay aren't implemented yet, and there's no
-// balances/positions/portfolio backend at all, so every other tab is a
-// placeholder rather than something wired to invented data.
-export function BottomPanel({ orders }: BottomPanelProps) {
+export function BottomPanel({
+  orders,
+  positions,
+  fills,
+  cancelOrder,
+  lastAck,
+  selectedSymbol,
+  midPrice,
+}: BottomPanelProps) {
   const [active, setActive] = useState<(typeof TABS)[number]>("Open Orders");
+
+  const openOrders = orders.filter((o) => OPEN_STATUSES.has(o.status));
+  const closedOrders = orders.filter((o) => !OPEN_STATUSES.has(o.status));
 
   return (
     <div className="flex h-64 flex-col bg-panel">
@@ -33,10 +50,11 @@ export function BottomPanel({ orders }: BottomPanelProps) {
         ))}
       </div>
       <div className="flex-1 overflow-auto">
-        {active === "Open Orders" ? (
-          <OpenOrders orders={orders} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-text-muted">Nothing here yet.</div>
+        {active === "Open Orders" && <OpenOrders orders={openOrders} cancelOrder={cancelOrder} lastAck={lastAck} />}
+        {active === "Closed Orders" && <OpenOrders orders={closedOrders} />}
+        {active === "Trades" && <FillHistory fills={fills} />}
+        {active === "Positions" && (
+          <PnlDisplay positions={positions} selectedSymbol={selectedSymbol} midPrice={midPrice} />
         )}
       </div>
     </div>

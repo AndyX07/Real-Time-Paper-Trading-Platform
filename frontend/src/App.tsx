@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CandleChart } from "./components/CandleChart/CandleChart";
 import { OrderBookLadder } from "./components/OrderBookLadder/OrderBookLadder";
-import { OrderEntry, type FakeOrder } from "./components/OrderEntry/OrderEntry";
+import { OrderEntry } from "./components/OrderEntry/OrderEntry";
 import { BottomPanel } from "./components/BottomPanel/BottomPanel";
 import { SymbolPicker } from "./components/SymbolPicker/SymbolPicker";
+import { useControlSocket } from "./hooks/useControlSocket";
 import type { SymbolInfo } from "./types/symbol";
 
 const DEFAULT_SYMBOL = "BTC/USD";
@@ -24,8 +25,10 @@ const INTERVALS = [
 export function App() {
   const [symbol, setSymbol] = useState(DEFAULT_SYMBOL);
   const [intervalMinutes, setIntervalMinutes] = useState(INTERVALS[0].minutes);
-  const [orders, setOrders] = useState<FakeOrder[]>([]);
   const [symbolInfos, setSymbolInfos] = useState<SymbolInfo[]>([]);
+  const [midPrice, setMidPrice] = useState<number | null>(null);
+
+  const { orders, positions, fills, placeOrder, cancelOrder, lastAck } = useControlSocket();
 
   // Fetched once here (rather than inside SymbolPicker) since price
   // precision -- not just the searchable list -- is derived from the same
@@ -41,6 +44,17 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // A mid price from the previous symbol's book must never bleed into the
+  // next one's first frame -- OrderBookLadder's own onMidPrice will
+  // overwrite this again as soon as its fresh book snapshot arrives.
+  useEffect(() => {
+    setMidPrice(null);
+  }, [symbol]);
+
+  const handleMidPrice = useCallback((bestBid: number, bestAsk: number) => {
+    setMidPrice((bestBid + bestAsk) / 2);
   }, []);
 
   const currentSymbolInfo = symbolInfos.find((s) => s.symbol === symbol);
@@ -77,16 +91,29 @@ export function App() {
         </div>
 
         <div className="min-h-0 w-72 shrink-0 overflow-hidden rounded-lg border border-border">
-          <OrderBookLadder symbol={symbol} priceDecimals={priceDecimals} quantityDecimals={quantityDecimals} />
+          <OrderBookLadder
+            symbol={symbol}
+            priceDecimals={priceDecimals}
+            quantityDecimals={quantityDecimals}
+            onMidPrice={handleMidPrice}
+          />
         </div>
 
         <div className="min-h-0 w-80 shrink-0 overflow-hidden rounded-lg border border-border">
-          <OrderEntry symbol={symbol} onOrderFilled={(order) => setOrders((prev) => [order, ...prev])} />
+          <OrderEntry symbol={symbol} placeOrder={placeOrder} lastAck={lastAck} />
         </div>
       </div>
 
       <div className="shrink-0 overflow-hidden rounded-lg border border-border">
-        <BottomPanel orders={orders} />
+        <BottomPanel
+          orders={orders}
+          positions={positions}
+          fills={fills}
+          cancelOrder={cancelOrder}
+          lastAck={lastAck}
+          selectedSymbol={symbol}
+          midPrice={midPrice}
+        />
       </div>
     </div>
   );
