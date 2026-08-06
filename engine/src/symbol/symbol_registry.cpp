@@ -9,6 +9,7 @@
 #include "engine/common/price_quantity.hpp"
 #include "engine/ipc/ring_buffer.hpp"
 #include "engine/ipc/snapshot_slot.hpp"
+#include "engine/observability/histogram.hpp"
 
 namespace {
 
@@ -105,7 +106,10 @@ SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
             delta.side = toWireSide(side);
             delta.price = price;
             delta.size = quantity;
-            slot->deltaQueue.tryPush(delta);
+            {
+                ScopedLatencyTimer timer{HistogramRegistry::instance().get("ipc.ring_push")};
+                slot->deltaQueue.tryPush(delta);
+            }
             enginePtr->onBookDelta(side, price, quantity);
         };
 

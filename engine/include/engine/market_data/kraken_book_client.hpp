@@ -45,11 +45,14 @@ public:
     void run();
     void stop();
 
+    // Public so tests/tools can feed raw recorded or synthetic WS text
+    // straight into the real parse+apply path without a live socket.
+    void handleMessage(std::string_view raw);
+
 private:
     void connect();
     void subscribe();
     void resubscribeAndRebuild();
-    void handleMessage(std::string_view raw);
     void applyMessage(const BookMessage& message);
 
     void publishSnapshot();

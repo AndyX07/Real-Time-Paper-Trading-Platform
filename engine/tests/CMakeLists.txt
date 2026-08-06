@@ -1,7 +1,5 @@
 find_package(Catch2 CONFIG REQUIRED)
 
-option(ENABLE_TSAN "Build engine_tests with ThreadSanitizer" OFF)
-
 add_executable(engine_tests
     test_order_book.cpp
     test_matching_engine.cpp
@@ -15,10 +13,16 @@ target_link_libraries(engine_tests PRIVATE
     Catch2::Catch2WithMain
 )
 
-if(ENABLE_TSAN)
-    target_compile_options(engine_tests PRIVATE -fsanitize=thread -g)
-    target_link_options(engine_tests PRIVATE -fsanitize=thread)
-endif()
+# Standalone second process for test_ring_buffer_stress.cpp's
+# cross-process case -- not a Catch2 test binary itself, just a small
+# writer/reader driver the test spawns and inspects via a result file.
+add_executable(ring_buffer_stress_helper ring_buffer_stress_helper.cpp)
+target_link_libraries(ring_buffer_stress_helper PRIVATE engine_lib)
+
+target_compile_definitions(engine_tests PRIVATE
+    RING_BUFFER_STRESS_HELPER_PATH="$<TARGET_FILE:ring_buffer_stress_helper>"
+    CHECKSUM_RESYNC_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/golden_session.ptrec")
+add_dependencies(engine_tests ring_buffer_stress_helper)
 
 include(CTest)
 include(Catch)

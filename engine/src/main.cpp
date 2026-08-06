@@ -1,15 +1,18 @@
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
 
 #include <grpcpp/grpcpp.h>
 
 #include "engine/control/control_server.hpp"
 #include "engine/ipc/shared_memory_manager.hpp"
 #include "engine/market_data/kraken_asset_pairs.hpp"
+#include "engine/observability/histogram.hpp"
 #include "engine/symbol/symbol_registry.hpp"
 
 namespace {
@@ -43,6 +46,9 @@ int main() {
         std::cerr << "engine: failed to start gRPC server on " << address << "\n";
         return 1;
     }
+
+    std::thread perfLogThread{[] { HistogramRegistry::instance().logAllAndReset(std::chrono::seconds{30}); }};
+    perfLogThread.detach();
 
     std::cout << "engine: listening on " << address << "\n";
     server->Wait();

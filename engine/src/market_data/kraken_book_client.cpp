@@ -15,6 +15,7 @@
 #include "engine/book/checksum.hpp"
 #include "engine/market_data/idle_timeout_watchdog.hpp"
 #include "engine/market_data/sync_timeout_guard.hpp"
+#include "engine/observability/histogram.hpp"
 
 namespace {
 
@@ -68,15 +69,22 @@ void KrakenBookClient::connect() {
 }
 
 void KrakenBookClient::subscribe() {
+    // No-op without a live socket -- true when handleMessage is driven
+    // directly (tests, replay tooling) rather than through run()/connect().
+    if (!ws_) {
+        return;
+    }
     std::string message = R"({"method":"subscribe","params":{"channel":"book","symbol":[")" +
                            symbol_ + R"("],"depth":)" + std::to_string(BOOK_DEPTH) + "}}";
     ws_->write(asio::buffer(message));
 }
 
 void KrakenBookClient::resubscribeAndRebuild() {
-    std::string unsubscribeMessage =
-        R"({"method":"unsubscribe","params":{"channel":"book","symbol":[")" + symbol_ + R"("]}})";
-    ws_->write(asio::buffer(unsubscribeMessage));
+    if (ws_) {
+        std::string unsubscribeMessage =
+            R"({"method":"unsubscribe","params":{"channel":"book","symbol":[")" + symbol_ + R"("]}})";
+        ws_->write(asio::buffer(unsubscribeMessage));
+    }
 
     book_.bids.clear();
     book_.asks.clear();
@@ -166,11 +174,14 @@ void KrakenBookClient::maybePublishSnapshot() {
 }
 
 void KrakenBookClient::handleMessage(std::string_view raw) {
-    auto message = parseBookMessage(parser_, raw);
-    if (message) {
-        applyMessage(*message);
+    {
+        ScopedLatencyTimer timer{HistogramRegistry::instance().get("book.tick_to_apply")};
+        auto message = parseBookMessage(parser_, raw);
+        if (message) {
+            applyMessage(*message);
+        }
     }
-    
+
     if (onTick_) {
         onTick_();
     }
