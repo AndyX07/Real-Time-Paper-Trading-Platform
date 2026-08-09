@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <new>
 #include <stdexcept>
+#include <string>
 
 #include <boost/interprocess/exceptions.hpp>
 
@@ -11,7 +12,6 @@ namespace bip = boost::interprocess;
 
 namespace {
 
-constexpr const char* SEGMENT_NAME = "paper_trader_book_v1";
 constexpr size_t SEGMENT_BYTES = sizeof(SharedMemorySegment);
 
 void setSlotSymbol(SymbolSlot& slot, std::string_view symbol) {
@@ -29,7 +29,9 @@ bool hasValidHeader(const SharedMemorySegment* layout, size_t mappedBytes) {
 
 }
 
-SharedMemoryManager::SharedMemoryManager() {
+SharedMemoryManager::SharedMemoryManager(std::string_view segmentName) {
+    std::string name{segmentName};
+
     // BOOST_INTERPROCESS_SHARED_DIR_PATH skips Boost's own directory-creation
     // step (it only runs that for its default, boot-timestamped location).
     std::filesystem::create_directories(BOOST_INTERPROCESS_SHARED_DIR_PATH);
@@ -37,7 +39,7 @@ SharedMemoryManager::SharedMemoryManager() {
     bool reuseExisting = false;
 
     try {
-        bip::shared_memory_object existing{bip::open_only, SEGMENT_NAME, bip::read_write};
+        bip::shared_memory_object existing{bip::open_only, name.c_str(), bip::read_write};
         bip::mapped_region existingRegion{existing, bip::read_write};
         reuseExisting = hasValidHeader(static_cast<const SharedMemorySegment*>(existingRegion.get_address()),
                                         existingRegion.get_size());
@@ -45,7 +47,7 @@ SharedMemoryManager::SharedMemoryManager() {
     }
 
     if (reuseExisting) {
-        segmentObject_ = bip::shared_memory_object(bip::open_only, SEGMENT_NAME, bip::read_write);
+        segmentObject_ = bip::shared_memory_object(bip::open_only, name.c_str(), bip::read_write);
         region_ = bip::mapped_region(segmentObject_, bip::read_write);
         layout_ = static_cast<SharedMemorySegment*>(region_.get_address());
 
@@ -55,8 +57,8 @@ SharedMemoryManager::SharedMemoryManager() {
         return;
     }
 
-    bip::shared_memory_object::remove(SEGMENT_NAME);
-    segmentObject_ = bip::shared_memory_object(bip::create_only, SEGMENT_NAME, bip::read_write);
+    bip::shared_memory_object::remove(name.c_str());
+    segmentObject_ = bip::shared_memory_object(bip::create_only, name.c_str(), bip::read_write);
     segmentObject_.truncate(static_cast<bip::offset_t>(SEGMENT_BYTES));
     region_ = bip::mapped_region(segmentObject_, bip::read_write);
     layout_ = new (region_.get_address()) SharedMemorySegment();

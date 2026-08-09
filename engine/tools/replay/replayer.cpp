@@ -12,7 +12,7 @@
 #include "engine/ipc/ring_buffer.hpp"
 #include "engine/market_data/kraken_book_client.hpp"
 #include "engine/observability/histogram.hpp"
-#include "recorded_session.hpp"
+#include "engine/replay/recorded_session.hpp"
 
 namespace {
 

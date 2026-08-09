@@ -7,7 +7,7 @@
 
 #include "engine/book/checksum.hpp"
 #include "engine/market_data/kraken_book_client.hpp"
-#include "../tools/replay/recorded_session.hpp"
+#include "engine/replay/recorded_session.hpp"
 
 namespace {
 

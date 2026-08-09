@@ -15,9 +15,16 @@ import (
 	"unsafe"
 
 	mmap "github.com/edsrzf/mmap-go"
+
+	"papertrader/backend/internal/observability"
 )
 
 var PollTick = 1 * time.Millisecond
+
+// SegmentNameOverride lets tests point at an isolated shared-memory segment
+// instead of the real SegmentName -- mirrors PollTick's test-seam pattern.
+// Empty (the default) means "use SegmentName", unaffected in production.
+var SegmentNameOverride string
 
 type PriceLevelTicks struct {
 	PriceTicks int64
@@ -50,6 +57,8 @@ type BookPoller struct {
 	mm      mmap.MMap
 	segment *SharedMemorySegment
 
+	counters *observability.BookCounters
+
 	mu           sync.Mutex
 	slotBySymbol map[string]int
 	expectedSeq  map[string]uint64
@@ -63,6 +72,7 @@ func NewBookPoller(onDelta DeltaCallback, onSnapshot SnapshotCallback) *BookPoll
 	return &BookPoller{
 		onDelta:      onDelta,
 		onSnapshot:   onSnapshot,
+		counters:     observability.NewBookCounters(),
 		slotBySymbol: make(map[string]int),
 		expectedSeq:  make(map[string]uint64),
 		bids:         make(map[string]map[int64]int64),
@@ -71,13 +81,21 @@ func NewBookPoller(onDelta DeltaCallback, onSnapshot SnapshotCallback) *BookPoll
 	}
 }
 
+func (p *BookPoller) Counters() *observability.BookCounters {
+	return p.counters
+}
+
 func segmentPath() (string, error) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", fmt.Errorf("book: could not determine source file path")
 	}
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile))))
-	return filepath.Join(repoRoot, ".shm", SegmentName), nil
+	segmentName := SegmentName
+	if SegmentNameOverride != "" {
+		segmentName = SegmentNameOverride
+	}
+	return filepath.Join(repoRoot, ".shm", segmentName), nil
 }
 
 func (p *BookPoller) attach() error {
@@ -380,9 +398,11 @@ func (p *BookPoller) pollSymbol(symbol string, slot *SymbolSlot) {
 		expected := p.expectedSeq[symbol]
 		if item.Seq != expected {
 			p.mu.Unlock()
+			dropped := atomic.LoadUint64(&queue.DroppedCount)
 			slog.Warn("book.reader: seq gap, resyncing",
 				"symbol", symbol, "expected", expected, "got", item.Seq,
-				"dropped", atomic.LoadUint64(&queue.DroppedCount))
+				"dropped", dropped)
+			p.counters.RecordResync(symbol, dropped)
 			p.resync(symbol, slot)
 			return
 		}

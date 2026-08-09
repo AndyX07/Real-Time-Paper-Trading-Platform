@@ -11,6 +11,7 @@ import (
 
 	"papertrader/backend/internal/config"
 	"papertrader/backend/internal/control"
+	"papertrader/backend/internal/observability"
 	"papertrader/backend/internal/schemas"
 )
 
@@ -29,6 +30,15 @@ func NewRouter(engineClient *control.EngineClient) *Router {
 	return r
 }
 
+// NewRouterWithSegment is NewRouter but pre-attaches the poller to an
+// in-memory segment instead of the real mmap file, so tests can drive it
+// without a running engine.
+func NewRouterWithSegment(engineClient *control.EngineClient, segment *SharedMemorySegment) *Router {
+	r := NewRouter(engineClient)
+	r.poller.segment = segment
+	return r
+}
+
 func (r *Router) Start(ctx context.Context) {
 	go func() {
 		if err := r.poller.Run(ctx); err != nil {
@@ -39,6 +49,10 @@ func (r *Router) Start(ctx context.Context) {
 
 func (r *Router) Stop() {
 	r.poller.Stop()
+}
+
+func (r *Router) Counters() *observability.BookCounters {
+	return r.poller.Counters()
 }
 
 func snapshotMessage(event SnapshotEvent) schemas.BookSnapshotMessage {

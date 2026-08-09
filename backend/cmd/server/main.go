@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -66,6 +67,10 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
+	})
+	mux.HandleFunc("/debug/book_counters", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bookRouter.Counters().Snapshot())
 	})
 	mux.HandleFunc("/api/symbols", symbols.Handler)
 	mux.HandleFunc("/api/candles/history", candleRouter.HandleHistory)

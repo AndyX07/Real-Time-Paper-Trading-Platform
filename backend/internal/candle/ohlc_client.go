@@ -38,8 +38,13 @@ func toUnixSeconds(iso string) int64 {
 	return t.UTC().Unix()
 }
 
+// InitialBackoff mirrors book.PollTick's test-seam pattern: overridable so
+// reconnect tests don't have to wait out the real backoff.
+var InitialBackoff = 1 * time.Second
+
 type OhlcClient struct {
 	onCandle CandleCallback
+	wsURL    string
 
 	mu                sync.Mutex
 	subscribed        map[SubKey]struct{}
@@ -52,6 +57,7 @@ type OhlcClient struct {
 func NewOhlcClient(onCandle CandleCallback) *OhlcClient {
 	return &OhlcClient{
 		onCandle:          onCandle,
+		wsURL:             config.KrakenOhlcWSURL,
 		subscribed:        make(map[SubKey]struct{}),
 		lastIntervalBegin: make(map[SubKey]string),
 		lastCandle:        make(map[SubKey]schemas.CandleMessage),
@@ -59,7 +65,7 @@ func NewOhlcClient(onCandle CandleCallback) *OhlcClient {
 }
 
 func (c *OhlcClient) Run(ctx context.Context) {
-	backoff := 1 * time.Second
+	backoff := InitialBackoff
 	for {
 		err := c.runOnce(ctx)
 
@@ -96,7 +102,7 @@ func (c *OhlcClient) Stop() {
 }
 
 func (c *OhlcClient) runOnce(ctx context.Context) error {
-	conn, _, err := websocket.Dial(ctx, config.KrakenOhlcWSURL, nil)
+	conn, _, err := websocket.Dial(ctx, c.wsURL, nil)
 	if err != nil {
 		return err
 	}

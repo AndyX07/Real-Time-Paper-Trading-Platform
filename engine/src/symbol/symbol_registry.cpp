@@ -3,13 +3,17 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <fstream>
 #include <span>
 #include <stdexcept>
+#include <thread>
+#include <vector>
 
 #include "engine/common/price_quantity.hpp"
 #include "engine/ipc/ring_buffer.hpp"
 #include "engine/ipc/snapshot_slot.hpp"
 #include "engine/observability/histogram.hpp"
+#include "engine/replay/recorded_session.hpp"
 
 namespace {
 
@@ -23,10 +27,39 @@ void setSnapshotSymbol(BookSnapshot& snapshot, std::string_view symbol) {
     std::memcpy(snapshot.symbol, symbol.data(), symbol.size());
 }
 
+// Drives a KrakenBookClient's real onDelta/onSnapshot callbacks from a
+// recorded session file instead of a live WebSocket, real-time-paced by
+// the recording's own inter-frame gaps. Used only when replaySessionPath
+// is set (opt-in, test-only); a missing or unreadable file is treated as
+// "nothing to replay" rather than a startup failure.
+void replaySessionIntoClient(KrakenBookClient& client, const std::string& path) {
+    std::ifstream in{path, std::ios::binary};
+    if (!in) {
+        return;
+    }
+    std::vector<RecordedFrame> frames;
+    try {
+        frames = readAllRecordedFrames(in);
+    } catch (const std::exception&) {
+        return;
+    }
+    for (size_t i = 0; i < frames.size(); ++i) {
+        if (i > 0) {
+            uint64_t gapNanos = frames[i].recvTsNanos - frames[i - 1].recvTsNanos;
+            if (gapNanos > 0) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds{gapNanos});
+            }
+        }
+        client.handleMessage(frames[i].raw);
+    }
 }
 
-SymbolRegistry::SymbolRegistry(SharedMemoryManager& sharedMemory, PrecisionLookup precisionLookup)
-    : sharedMemory_{sharedMemory}, precisionLookup_{std::move(precisionLookup)} {}
+}
+
+SymbolRegistry::SymbolRegistry(SharedMemoryManager& sharedMemory, PrecisionLookup precisionLookup,
+                                std::optional<std::string> replaySessionPath)
+    : sharedMemory_{sharedMemory}, precisionLookup_{std::move(precisionLookup)},
+      replaySessionPath_{std::move(replaySessionPath)} {}
 
 SymbolRegistry::~SymbolRegistry() {
     std::lock_guard<std::mutex> lock{mutex_};
@@ -144,7 +177,12 @@ SubscribeResult SymbolRegistry::subscribe(std::string_view symbol) {
                                                         precision->pairDecimals, precision->lotDecimals,
                                                         std::move(onTick));
     KrakenBookClient* clientPtr = entry->client.get();
-    entry->thread = std::thread([clientPtr] { clientPtr->run(); });
+    if (replaySessionPath_) {
+        std::string path = *replaySessionPath_;
+        entry->thread = std::thread([clientPtr, path] { replaySessionIntoClient(*clientPtr, path); });
+    } else {
+        entry->thread = std::thread([clientPtr] { clientPtr->run(); });
+    }
 
     entries_.emplace(std::move(key), std::move(entry));
     return {true, ""};

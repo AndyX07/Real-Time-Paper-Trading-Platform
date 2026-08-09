@@ -19,7 +19,7 @@
 
 #include <openssl/ssl.h>
 
-#include "recorded_session.hpp"
+#include "engine/replay/recorded_session.hpp"
 
 namespace asio = boost::asio;
 namespace beast = boost::beast;

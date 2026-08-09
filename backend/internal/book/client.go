@@ -87,6 +87,8 @@ func (c *ClientState) collapseAndResync(poller *BookPoller) {
 	overflows := c.overflowCount
 	c.mu.Unlock()
 
+	poller.counters.RecordClientOverflow()
+
 drain:
 	for {
 		select {

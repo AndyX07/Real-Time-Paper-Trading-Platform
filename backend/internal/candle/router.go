@@ -20,8 +20,16 @@ type Router struct {
 }
 
 func NewRouter() *Router {
+	return NewRouterWithWSURL(config.KrakenOhlcWSURL)
+}
+
+// NewRouterWithWSURL is NewRouter but points the OhlcClient at a custom
+// WebSocket URL instead of Kraken's, so tests can drive it against a fake
+// server.
+func NewRouterWithWSURL(wsURL string) *Router {
 	r := &Router{subs: NewSubscriptionManager()}
 	r.client = NewOhlcClient(r.onCandle)
+	r.client.wsURL = wsURL
 	return r
 }
 

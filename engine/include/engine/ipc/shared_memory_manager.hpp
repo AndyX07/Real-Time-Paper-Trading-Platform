@@ -37,7 +37,7 @@ struct SharedMemorySegment {
 
 class SharedMemoryManager {
 public:
-    SharedMemoryManager();
+    explicit SharedMemoryManager(std::string_view segmentName = "paper_trader_book_v1");
 
     ~SharedMemoryManager() = default;
 

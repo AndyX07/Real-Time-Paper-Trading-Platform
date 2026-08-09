@@ -30,7 +30,8 @@ class SymbolRegistry {
 public:
     using PrecisionLookup = std::function<std::optional<SymbolPrecision>(std::string_view symbol)>;
 
-    SymbolRegistry(SharedMemoryManager& sharedMemory, PrecisionLookup precisionLookup);
+    SymbolRegistry(SharedMemoryManager& sharedMemory, PrecisionLookup precisionLookup,
+                   std::optional<std::string> replaySessionPath = std::nullopt);
 
     ~SymbolRegistry();
 
@@ -82,6 +83,7 @@ private:
     std::atomic<uint64_t> nextOrderId_{1};
     SharedMemoryManager& sharedMemory_;
     PrecisionLookup precisionLookup_;
+    std::optional<std::string> replaySessionPath_;
 
     std::mutex fillMutex_;
     std::condition_variable fillCv_;
