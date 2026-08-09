@@ -53,13 +53,9 @@ target_include_directories(engine_lib PUBLIC
     "${PROTO_GEN_DIR}"
 )
 
-# Boost's shared_memory_object has no native-named-section path on Windows --
-# it always backs itself with a real file, and its default location is an
-# undocumented, boot-timestamped directory under the "shared documents"
-# folder that a Python reader has no stable way to replicate. Pinning it to
-# a fixed, repo-relative path turns discovery into "open this exact file" on
-# both sides. Mirrored in backend/app/book/ring_buffer_reader.py.
-get_filename_component(SHM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.shm" ABSOLUTE)
+if(NOT DEFINED SHM_DIR)
+    get_filename_component(SHM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../.shm" ABSOLUTE)
+endif()
 target_compile_definitions(engine_lib PUBLIC
     BOOST_INTERPROCESS_SHARED_DIR_PATH="${SHM_DIR}"
 )

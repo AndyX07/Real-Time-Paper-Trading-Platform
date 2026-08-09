@@ -1,0 +1,45 @@
+services:
+  engine:
+    build:
+      context: .
+      dockerfile: engine/Dockerfile
+    environment:
+      ENGINE_GRPC_HOST: "0.0.0.0"
+      ENGINE_GRPC_PORT: "50051"
+    volumes:
+      - shm-data:/dev/shm
+    ports:
+      - "50051:50051"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      engine:
+        condition: service_started
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      ENGINE_GRPC_HOST: "engine"
+      ENGINE_GRPC_PORT: "50051"
+      DB_PATH: "/data/paper_trader.db"
+      SHM_BASE_DIR: "/dev/shm"
+    volumes:
+      - shm-data:/dev/shm
+      - backend-db:/data
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  shm-data:
+  backend-db:

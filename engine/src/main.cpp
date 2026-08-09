@@ -18,8 +18,9 @@
 namespace {
 
 std::string controlPlaneAddress() {
+    const char* host = std::getenv("ENGINE_GRPC_HOST");
     const char* port = std::getenv("ENGINE_GRPC_PORT");
-    return "127.0.0.1:" + std::string(port ? port : "50051");
+    return std::string(host ? host : "127.0.0.1") + ":" + std::string(port ? port : "50051");
 }
 
 uint64_t generateInstanceId() {

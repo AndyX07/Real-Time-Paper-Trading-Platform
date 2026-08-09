@@ -86,15 +86,18 @@ func (p *BookPoller) Counters() *observability.BookCounters {
 }
 
 func segmentPath() (string, error) {
+	segmentName := SegmentName
+	if SegmentNameOverride != "" {
+		segmentName = SegmentNameOverride
+	}
+	if base := os.Getenv("SHM_BASE_DIR"); base != "" {
+		return filepath.Join(base, segmentName), nil
+	}
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		return "", fmt.Errorf("book: could not determine source file path")
 	}
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile))))
-	segmentName := SegmentName
-	if SegmentNameOverride != "" {
-		segmentName = SegmentNameOverride
-	}
 	return filepath.Join(repoRoot, ".shm", segmentName), nil
 }
 
