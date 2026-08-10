@@ -6,9 +6,11 @@
 // TestPathIndependence* does.
 //
 // Opt-in only: set PAPER_TRADER_TEST_ENGINE_BIN to a built harness binary
-// path, e.g.
+// path. Go test binaries run with their working directory set to this
+// package's own source directory, not the repo root or wherever `go test`
+// was invoked from -- so use an absolute path, e.g. from backend/:
 //
-//	PAPER_TRADER_TEST_ENGINE_BIN=engine/out/build/<preset>/tools/replay/test_engine_harness.exe \
+//	PAPER_TRADER_TEST_ENGINE_BIN="$(pwd)/../engine/out/build/<preset>/tools/replay/test_engine_harness.exe" \
 //	    go test -run CrossProcess -v ./internal/integration/...
 //
 // The test is otherwise network-free and deterministic: the harness
