@@ -67,7 +67,7 @@ func NewOhlcClient(onCandle CandleCallback) *OhlcClient {
 func (c *OhlcClient) Run(ctx context.Context) {
 	backoff := InitialBackoff
 	for {
-		err := c.runOnce(ctx)
+		err := c.runOnce(ctx, &backoff)
 
 		c.mu.Lock()
 		stopped := c.stopped
@@ -101,7 +101,7 @@ func (c *OhlcClient) Stop() {
 	}
 }
 
-func (c *OhlcClient) runOnce(ctx context.Context) error {
+func (c *OhlcClient) runOnce(ctx context.Context, backoff *time.Duration) error {
 	conn, _, err := websocket.Dial(ctx, c.wsURL, nil)
 	if err != nil {
 		return err
@@ -129,6 +129,8 @@ func (c *OhlcClient) runOnce(ctx context.Context) error {
 			return err
 		}
 	}
+
+	*backoff = InitialBackoff
 
 	for {
 		_, data, err := conn.Read(ctx)
