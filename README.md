@@ -15,16 +15,16 @@ Three independent processes. The engine and backend talk over two IPC
 boundaries; the backend and frontend talk over plain WebSockets:
 
 ```
- Kraken WS/REST                          Kraken WS/REST
- (book channel)                       (ohlc channel + history)
-       │                                        │
-       ▼                                        ▼
-┌─────────────┐                                ┌─────────────┐   WebSocket   ┌──────────┐
-│  C++ engine │──── shared memory ────────────▶│  Go backend │◀─────────────▶│ frontend │
-│ (order book,│   (snapshots + deltas)          │ (book+candle│               │ (React/  │
-│  matching)  │◀──────── gRPC control plane ────│  fan-out,   │               │  Vite)   │
-└─────────────┘  SubscribeBook / PlaceOrder /   │  orders/DB) │               └──────────┘
-                        WatchFills              └─────────────┘
+ Kraken WS/REST                                  Kraken WS/REST
+ (book channel)                                 (ohlc channel + history)
+       │                                               │
+       ▼                                               ▼
+┌─────────────┐                                 ┌─────────────┐    WebSocket    ┌──────────┐
+│  C++ engine │──── shared memory ─────────────▶│  Go backend │◀───────────────▶│ frontend │
+│ (order book,│       (snapshots + deltas)      │ (book+candle│                 │ (React/  │
+│  matching)  │◀──────── gRPC control plane ────│  fan-out,   │                 │  Vite)   │
+└─────────────┘   SubscribeBook / PlaceOrder /  │  orders/DB) │                 └──────────┘
+                           WatchFills           └─────────────┘
 ```
 
 The engine and backend are separate OS processes so the latency-sensitive
