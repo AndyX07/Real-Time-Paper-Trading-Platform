@@ -2,6 +2,12 @@
 
 Isolates the shared-memory IPC.
 
+`pop` is measured by a dedicated thread polling `tryPop` every 10us for
+the whole run (see `kraken_replayer`'s `--measure-pop`), timing and
+counting every attempt, hit or miss -- representing steady-state polling
+overhead rather than per-delta consumption cost. Pop count therefore
+scales with run duration, not with push count.
+
 ## Release build
 
 | Speed | Op | count | p50 | p90 | p99 | max |
