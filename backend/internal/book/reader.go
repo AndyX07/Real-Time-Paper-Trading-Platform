@@ -53,9 +53,10 @@ type BookPoller struct {
 	onDelta    DeltaCallback
 	onSnapshot SnapshotCallback
 
-	file    *os.File
-	mm      mmap.MMap
-	segment *SharedMemorySegment
+	file     *os.File
+	mm       mmap.MMap
+	segment  *SharedMemorySegment
+	detached bool
 
 	counters *observability.BookCounters
 
@@ -135,6 +136,9 @@ func (p *BookPoller) attach() error {
 func (p *BookPoller) ensureAttached() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.detached {
+		return fmt.Errorf("book.reader: poller was stopped and cannot be re-attached")
+	}
 	if p.segment != nil {
 		return nil
 	}
@@ -149,10 +153,21 @@ func matchesSymbol(field []byte, wanted string) bool {
 	return string(field[:n]) == wanted
 }
 
-func (p *BookPoller) findSlot(ctx context.Context, symbol string) (int, error) {
+// currentSegment returns the attached segment pointer under the lock, so
+// callers get a single consistent read instead of racing Stop()'s nil-out.
+func (p *BookPoller) currentSegment() (*SharedMemorySegment, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.segment == nil {
+		return nil, fmt.Errorf("book.reader: not attached to shared memory segment")
+	}
+	return p.segment, nil
+}
+
+func (p *BookPoller) findSlot(ctx context.Context, segment *SharedMemorySegment, symbol string) (int, error) {
 	for range 50 {
-		for idx := range p.segment.Slots {
-			slot := &p.segment.Slots[idx]
+		for idx := range segment.Slots {
+			slot := &segment.Slots[idx]
 			if atomic.LoadUint32(&slot.Claimed) != 0 && matchesSymbol(slot.Symbol[:], symbol) {
 				return idx, nil
 			}
@@ -324,11 +339,15 @@ func (p *BookPoller) RegisterSymbol(ctx context.Context, symbol string) (Snapsho
 	if err := p.ensureAttached(); err != nil {
 		return SnapshotEvent{}, err
 	}
-	idx, err := p.findSlot(ctx, symbol)
+	segment, err := p.currentSegment()
 	if err != nil {
 		return SnapshotEvent{}, err
 	}
-	slot := &p.segment.Slots[idx]
+	idx, err := p.findSlot(ctx, segment, symbol)
+	if err != nil {
+		return SnapshotEvent{}, err
+	}
+	slot := &segment.Slots[idx]
 
 	snapshot, err := p.awaitInitialSnapshot(ctx, symbol, &slot.Snapshot)
 	if err != nil {
@@ -439,12 +458,18 @@ func (p *BookPoller) Run(ctx context.Context) error {
 		return err
 	}
 	defer func() {
+		p.mu.Lock()
 		if p.mm != nil {
 			p.mm.Unmap()
+			p.mm = nil
 		}
 		if p.file != nil {
 			p.file.Close()
+			p.file = nil
 		}
+		p.segment = nil
+		p.detached = true
+		p.mu.Unlock()
 	}()
 
 	ticker := time.NewTicker(PollTick)
