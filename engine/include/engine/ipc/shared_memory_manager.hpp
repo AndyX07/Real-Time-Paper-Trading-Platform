@@ -24,7 +24,9 @@ struct SharedMemoryHeader {
 static_assert(std::is_trivially_copyable_v<SharedMemoryHeader>);
 
 struct SymbolSlot {
-    std::atomic<bool> claimed{false};
+    // uint32_t, not bool, so it lines up byte-for-byte with the Go side --
+    // Go's sync/atomic has no LoadUint8, so the mirrored struct reads this as uint32.
+    std::atomic<uint32_t> claimed{0};
     char symbol[16]{};
     BookDeltaRingBuffer deltaQueue;
     SnapshotSlot snapshotSlot;

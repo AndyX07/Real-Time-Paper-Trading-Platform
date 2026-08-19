@@ -72,7 +72,7 @@ SymbolSlot* SharedMemoryManager::claimSlot(std::string_view symbol) {
             slot.deltaQueue.reset();
             slot.snapshotSlot.reset();
             setSlotSymbol(slot, symbol);
-            slot.claimed.store(true, std::memory_order_release);
+            slot.claimed.store(1, std::memory_order_release);
             return &slot;
         }
     }
@@ -81,5 +81,5 @@ SymbolSlot* SharedMemoryManager::claimSlot(std::string_view symbol) {
 
 void SharedMemoryManager::releaseSlot(SymbolSlot* slot) {
     std::memset(slot->symbol, 0, sizeof(slot->symbol));
-    slot->claimed.store(false, std::memory_order_release);
+    slot->claimed.store(0, std::memory_order_release);
 }

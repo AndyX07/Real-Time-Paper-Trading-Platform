@@ -153,7 +153,7 @@ func (p *BookPoller) findSlot(ctx context.Context, symbol string) (int, error) {
 	for range 50 {
 		for idx := range p.segment.Slots {
 			slot := &p.segment.Slots[idx]
-			if slot.Claimed != 0 && matchesSymbol(slot.Symbol[:], symbol) {
+			if atomic.LoadUint32(&slot.Claimed) != 0 && matchesSymbol(slot.Symbol[:], symbol) {
 				return idx, nil
 			}
 		}

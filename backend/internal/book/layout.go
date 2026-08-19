@@ -54,7 +54,7 @@ type SnapshotSlot struct {
 }
 
 type SymbolSlot struct {
-	Claimed    uint8 // atomic
+	Claimed    uint32 // atomic -- uint32 because Go's sync/atomic has no LoadUint8
 	Symbol     [16]byte
 	DeltaQueue BookDeltaRingBuffer
 	Snapshot   SnapshotSlot
