@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atomic>
+#include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -11,6 +13,7 @@
 #include "engine/common/price_quantity.hpp"
 
 constexpr uint64_t RING_BUFFER_CAPACITY = 4096;
+static_assert(std::has_single_bit(RING_BUFFER_CAPACITY), "capacity must be a power of two for w % CAP to strength-reduce to a mask");
 
 struct BookDelta {
     char symbol[16];
@@ -22,6 +25,16 @@ struct BookDelta {
 };
 
 static_assert(std::is_trivially_copyable_v<BookDelta>);
+
+// Pins the hand-mirrored Go layout (backend/internal/book/layout.go) byte-for-byte.
+// If this ever trips, the Go struct needs the matching change too.
+static_assert(offsetof(BookDelta, symbol) == 0);
+static_assert(offsetof(BookDelta, seq) == 16);
+static_assert(offsetof(BookDelta, engineTsNanos) == 24);
+static_assert(offsetof(BookDelta, side) == 32);
+static_assert(offsetof(BookDelta, price) == 40); // 7-byte hole after side for Price's 8-byte alignment
+static_assert(offsetof(BookDelta, size) == 48);
+static_assert(sizeof(BookDelta) == 56);
 
 inline uint8_t toWireSide(BookSide side) {
     return static_cast<uint8_t>(side);
@@ -49,11 +62,6 @@ public:
         readIndex_.store(0, std::memory_order_relaxed);
         droppedCount_.store(0, std::memory_order_relaxed);
     }
-
-    // release stops compiler reordering here
-    // cross process visibility is x86-64 TSO store->store ordering guarantee
-    // there's no c++ acquire pairing the release because the reader is a separate Go process
-    // this would not be safe on ARM
 
     // returns false and drops item if queue is full
     bool tryPush(const BookDelta& item) {
@@ -84,12 +92,17 @@ public:
         return true;
     }
 
+public:
+    static constexpr size_t writeIndexOffset() { return offsetof(BookDeltaRingBuffer, writeIndex_); }
+
 private:
     std::atomic<uint64_t> writeIndex_{0};
     std::atomic<uint64_t> readIndex_{0};
     std::atomic<uint64_t> droppedCount_{0};
     BookDelta slots_[RING_BUFFER_CAPACITY];
 };
+
+static_assert(BookDeltaRingBuffer::writeIndexOffset() == 0);
 
 static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
