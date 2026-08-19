@@ -35,15 +35,14 @@ public:
         value_ = T{};
     }
 
-    // release stops compiler reordering here
-    // cross process visibility is x86-64 TSO store->store ordering guarantee
-    // there's no c++ acquire pairing the release because the reader is a separate Go process
-    // this would not be safe on ARM
-
     // when version is odd, write is in progress
     // when version is even, write is finished
+    //
+    // the odd bump needs acquire: it must stop the payload write below from being
+    // hoisted above it (a constraint on the *subsequent* access). relaxed would leave
+    // the compiler free to reorder value_ = value ahead of the version bump.
     void write(const T& value) {
-        version_.fetch_add(1, std::memory_order_relaxed);
+        version_.fetch_add(1, std::memory_order_acq_rel);
         value_ = value;
         version_.fetch_add(1, std::memory_order_release);
     }

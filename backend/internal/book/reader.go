@@ -181,19 +181,25 @@ func (p *BookPoller) readSnapshot(slot *SnapshotSlot) (SnapshotEvent, error) {
 			continue
 		}
 		value := slot.Value
-		after := atomic.LoadUint32(&slot.Version)
-		if before == after {
-			symbol := string(value.Symbol[:trimNulIndex(value.Symbol[:])])
-			bids := make([]PriceLevelTicks, value.NumBidLevels)
-			for i := range bids {
-				bids[i] = PriceLevelTicks{PriceTicks: value.Bids[i].Price.Ticks, SizeTicks: value.Bids[i].Quantity.Ticks}
-			}
-			asks := make([]PriceLevelTicks, value.NumAskLevels)
-			for i := range asks {
-				asks[i] = PriceLevelTicks{PriceTicks: value.Asks[i].Price.Ticks, SizeTicks: value.Asks[i].Quantity.Ticks}
-			}
-			return SnapshotEvent{Symbol: symbol, Seq: value.Seq, Bids: bids, Asks: asks}, nil
+		// Must be a CAS, not a plain load. The trailing check needs release
+		// semantics -- it has to stop the plain copy above from being reordered
+		// past it -- and a load can never carry release (only a store/RMW can).
+		// A same-value CAS is Go's only way to get that; Go has no atomic.Fence.
+		if !atomic.CompareAndSwapUint32(&slot.Version, before, before) {
+			continue
 		}
+		symbol := string(value.Symbol[:trimNulIndex(value.Symbol[:])])
+		nb := min(int(value.NumBidLevels), len(value.Bids))
+		na := min(int(value.NumAskLevels), len(value.Asks))
+		bids := make([]PriceLevelTicks, nb)
+		for i := range bids {
+			bids[i] = PriceLevelTicks{PriceTicks: value.Bids[i].Price.Ticks, SizeTicks: value.Bids[i].Quantity.Ticks}
+		}
+		asks := make([]PriceLevelTicks, na)
+		for i := range asks {
+			asks[i] = PriceLevelTicks{PriceTicks: value.Asks[i].Price.Ticks, SizeTicks: value.Asks[i].Quantity.Ticks}
+		}
+		return SnapshotEvent{Symbol: symbol, Seq: value.Seq, Bids: bids, Asks: asks}, nil
 	}
 	return SnapshotEvent{}, fmt.Errorf("book.reader: seqlock read did not stabilize after 1000 attempts")
 }
